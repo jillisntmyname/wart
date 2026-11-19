@@ -762,14 +762,15 @@
                   <li>Downloads <code>cloudflared.exe</code> automatically and opens an encrypted HTTPS tunnel</li>
                 </ul>
               </li>
-              <li><strong>Share with ALL staff automatically (recommended):</strong> In your <strong>Cloudflare Dashboard &rarr; Workers &amp; Pages &rarr; your Worker &rarr; Settings &rarr; Variables and Secrets</strong>, add two encrypted secrets:
+              <li><strong>One-Time Cloudflare Setup for Zero-Domain Auto-Registration (Recommended):</strong>
                 <ul>
-                  <li><code>PYTHON_BACKEND_URL</code> = your Tunnel HTTPS URL</li>
-                  <li><code>PYTHON_RELAY_SECRET</code> = the Relay Secret printed by the launcher</li>
+                  <li>In <strong>Cloudflare Dashboard &rarr; Storage &amp; Databases &rarr; KV</strong>, create a free KV Namespace (e.g. <code>PETITION_CONFIG</code>).</li>
+                  <li>In your <strong>Worker &rarr; Settings &rarr; Bindings &rarr; Add &rarr; KV Namespace</strong>, set Variable Name = <code>PETITION_CONFIG</code> and pick that namespace.</li>
+                  <li>In your <strong>Worker &rarr; Settings &rarr; Variables and Secrets</strong>, add encrypted secret <code>PYTHON_RELAY_SECRET</code> = the Relay Secret printed by the Windows launcher.</li>
+                  <li>On first launch, enter your Cloudflare Worker URL when prompted (saved to <code>petition_app\data\cloudflare_worker_url.txt</code>). From then on, every time the office PC boots or restarts, the launcher <strong>automatically registers the new Quick Tunnel URL in Cloudflare KV</strong> &mdash; all staff connect automatically with zero copy-paste!</li>
                 </ul>
-                Once set in Cloudflare, <strong>every staff member automatically connects to the shared office PC</strong> with zero setup on their computers!
               </li>
-              <li><strong>Make the URL permanent (so it never changes on reboot):</strong> In <strong>Cloudflare Zero Trust &rarr; Networks &rarr; Tunnels &rarr; Create a Tunnel</strong>, point a hostname (e.g., <code>petition-api.yourdomain.com</code>) to <code>http://127.0.0.1:8765</code>, and paste the tunnel token into <code>petition_app\data\tunnel_token.txt</code>. Re-running the <code>.bat</code> launcher will use that permanent URL automatically (and you can drop a shortcut to the <code>.bat</code> in <code>shell:startup</code> so it starts on boot).</li>
+              <li><strong>Optional (Windows Auto-Start on Boot):</strong> Press <code>Win + R</code>, type <code>shell:startup</code>, and drop a shortcut to <code>Start Shared Petition Server (Cloudflare Tunnel).bat</code> in that folder.</li>
             </ol>
           </div>
         </details>

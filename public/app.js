@@ -205,6 +205,8 @@ const CF_SETTINGS_KEY = "mdfl_cf_settings_v1";
 const CF_CASES_KEY = "mdfl_cf_saved_cases_v1";
 const CF_PY_CONN_KEY = "mdfl_cf_python_conn_v1";
 let cfServerHasFirmBackend = false;
+let cfServerBackendSource = "none";
+let cfServerBackendUpdatedAt = null;
 
 function _cfLoadSettings() {
   const base = JSON.parse(JSON.stringify(window.CloudflarePetitionEngine.DEFAULT_SETTINGS));
@@ -251,9 +253,11 @@ function _cfUpdateEngineBadges() {
     if (badge) { badge.textContent = "Connected via Browser URL"; badge.className = "tag tag-ok"; }
     if (statusEl) statusEl.innerHTML = `<div class="alert alert-ok"><strong>Active Mode:</strong> Encrypted Cloudflare Relay &rarr; Python Server (<code>${esc(conn.url)}</code>). Uploads &amp; packets are AES-256-GCM encrypted in transit.</div>`;
   } else if (cfServerHasFirmBackend) {
-    if (engPill) { engPill.textContent = "Engine: Shared Office Python PC"; engPill.className = "pill pill-ok"; }
-    if (badge) { badge.textContent = "Firm-Wide Shared Python Server"; badge.className = "tag tag-ok"; }
-    if (statusEl) statusEl.innerHTML = `<div class="alert alert-ok"><strong>Active Mode:</strong> Automatically connected to your firm's <strong>Shared Office Python Server</strong> (configured firm-wide via Cloudflare Secret <code>PYTHON_BACKEND_URL</code>). All staff share this connection!</div>`;
+    const isAuto = cfServerBackendSource === "kv-auto-registered";
+    const whenTxt = cfServerBackendUpdatedAt ? ` (Auto-synced ${new Date(cfServerBackendUpdatedAt).toLocaleString()})` : "";
+    if (engPill) { engPill.textContent = isAuto ? "Engine: Office PC (Auto-Synced)" : "Engine: Shared Office Python PC"; engPill.className = "pill pill-ok"; }
+    if (badge) { badge.textContent = isAuto ? "Auto-Registered Office PC" : "Firm-Wide Shared Python Server"; badge.className = "tag tag-ok"; }
+    if (statusEl) statusEl.innerHTML = `<div class="alert alert-ok"><strong>Active Mode:</strong> Automatically connected to your firm's <strong>Shared Office Python Server</strong>${isAuto ? " via <strong>Cloudflare KV Auto-Registration</strong>" + esc(whenTxt) : " (configured via Cloudflare Secret)"}. All staff share this connection automatically!</div>`;
   } else {
     if (engPill) { engPill.textContent = "Engine: Cloudflare Standalone"; engPill.className = "pill"; }
     if (badge) { badge.textContent = "Standalone Edge Mode"; badge.className = "tag tag-warn"; }
@@ -309,6 +313,8 @@ async function cfApiAdapter(url, opts = {}) {
     try {
       const hs = await window.PetitionCrypto.handshake();
       cfServerHasFirmBackend = hs.backend_mode === "encrypted-python-relay";
+      cfServerBackendSource = hs.backend_source || "none";
+      cfServerBackendUpdatedAt = hs.backend_updated_at || null;
       const pill = document.getElementById("hdr-e2e");
       if (pill) {
         pill.textContent = hs.requires_passphrase ? "🔒 E2E: AES-256-GCM (Firm Key)" : "🔒 E2E: AES-256-GCM (ECDH)";

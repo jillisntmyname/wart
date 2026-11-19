@@ -1,10 +1,12 @@
 /**
  * Cloudflare Worker Entrypoint (Workers with Static Assets)
- * Routes /api/* requests to our encrypted API handlers and serves everything else from ./public via env.ASSETS.
+ * Routes /api/* requests to our encrypted API handlers + KV tunnel auto-registration,
+ * and serves everything else from ./public via env.ASSETS.
  */
 import { onRequestGet as handleHandshake } from "../functions/api/crypto/handshake.js";
 import { onRequestPost as handleSecurePost } from "../functions/api/secure/[[route]].js";
 import { onRequestGet as handleUpdates } from "../functions/api/updates.js";
+import { onRequestPost as handleTunnelRegister } from "../functions/api/tunnel/register.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,18 +18,23 @@ export default {
       return handleHandshake({ request, env, ctx });
     }
 
-    // 2. Encrypted Payload Endpoint (/api/secure/*)
+    // 2. Auto-Register Quick Tunnel URL from Office Windows PC (authenticated by X-Relay-Secret)
+    if (path === "/api/tunnel/register" && request.method === "POST") {
+      return handleTunnelRegister({ request, env, ctx });
+    }
+
+    // 3. Encrypted Payload Endpoint (/api/secure/*)
     if (path.startsWith("/api/secure/") && request.method === "POST") {
       const route = path.slice("/api/secure/".length);
       return handleSecurePost({ request, env, ctx, params: { route } });
     }
 
-    // 3. Live MDFL Tampa Division Announcements Proxy
+    // 4. Live MDFL Tampa Division Announcements Proxy
     if (path === "/api/updates" && request.method === "GET") {
       return handleUpdates({ request, env, ctx });
     }
 
-    // 4. Static Assets (public/, public/Templates/, public/means-test/)
+    // 5. Static Assets (public/, public/Templates/, public/means-test/)
     if (env && env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

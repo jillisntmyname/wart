@@ -1,4 +1,5 @@
 import { decryptEnvelope, encryptResponse } from "../_crypto.js";
+import { resolveFirmBackend } from "../crypto/handshake.js";
 
 /**
  * POST /api/secure/:route
@@ -18,15 +19,20 @@ export async function onRequestPost({ request, params, env }) {
     // 1. Decrypt payload inside Cloudflare Worker volatile memory
     const { payload, aesKey, mode } = await decryptEnvelope(envelope, env);
 
-    // Resolve shared Python backend URL (Cloudflare firm-wide secret takes priority unless user explicitly overrides)
+    // Resolve shared Python backend URL (Cloudflare Secret OR KV auto-registered Quick Tunnel, unless browser overrides)
     const rawOverrideUrl = String(payload?._backend_url || "").trim();
     const rawOverrideSecret = String(payload?._relay_secret || "").trim();
-    const envBackendUrl = String(env?.PYTHON_BACKEND_URL || "").trim();
+    const firmBackend = await resolveFirmBackend(env);
     const envRelaySecret = String(env?.PYTHON_RELAY_SECRET || "").trim();
 
-    const backendUrl = (rawOverrideUrl || envBackendUrl).replace(/\/+$/, "");
+    const backendUrl = (rawOverrideUrl || firmBackend.url).replace(/\/+$/, "");
     const relaySecret = rawOverrideUrl ? (rawOverrideSecret || envRelaySecret) : (envRelaySecret || rawOverrideSecret);
-    const usingFirmWideEnv = Boolean(envBackendUrl && !rawOverrideUrl);
+    const usingFirmWideEnv = Boolean(firmBackend.url && !rawOverrideUrl);
+    const backendScopeLabel = usingFirmWideEnv
+      ? (firmBackend.source === "kv-auto-registered"
+          ? `Auto-Registered Office PC Tunnel (Updated ${firmBackend.updated_at || "recently"})`
+          : "Firm-Wide Cloudflare Secret (Shared by All Users)")
+      : (backendUrl ? "Browser Settings Tunnel URL" : "None");
 
     // Strip internal routing metadata before forwarding
     const cleanPayload = payload && typeof payload === "object" ? { ...payload } : payload;
@@ -67,7 +73,9 @@ export async function onRequestPost({ request, params, env }) {
       }
       resultObj = {
         ...body,
-        connected_via: usingFirmWideEnv ? "Firm-Wide Cloudflare Secret (Shared by All Users)" : "Browser Settings Tunnel URL",
+        connected_via: backendScopeLabel,
+        backend_source: firmBackend.source,
+        backend_updated_at: firmBackend.updated_at,
       };
     } else if (backendUrl) {
       // ===== ENCRYPTED RELAY TO SHARED PYTHON PDF SERVER =====

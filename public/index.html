@@ -19,7 +19,8 @@
     <div class="topbar-meta">
       <span class="pill pill-gold" id="hdr-folder">Folder: Unnamed,Client</span>
       <span class="pill" id="hdr-chapter">Chapter 7</span>
-      <span class="pill pill-ok" id="hdr-e2e" style="cursor:pointer;" title="Click to test End-to-End AES-256-GCM Encryption with Cloudflare Pages">🔒 E2E: AES-256-GCM</span>
+      <span class="pill pill-ok" id="hdr-e2e" style="cursor:pointer;" title="Click to test End-to-End AES-256-GCM Encryption with Cloudflare">🔒 E2E: AES-256-GCM</span>
+      <span class="pill" id="hdr-engine" style="cursor:pointer;" title="Active PDF Engine (click to configure in Settings)">Engine: Checking...</span>
       <span class="pill pill-ok" id="hdr-compliance">Compliance: Ready</span>
       <button class="btn btn-secondary btn-sm" id="btn-save-draft">Save Draft</button>
       <button class="btn btn-gold btn-sm" id="btn-quick-generate">Generate Packet</button>
@@ -712,6 +713,68 @@
 
     <!-- ==================== TAB 8: SETTINGS ==================== -->
     <section class="tab-panel" id="tab-settings">
+      <!-- SHARED WINDOWS PYTHON PDF SERVER CONNECTION -->
+      <div class="card" style="border-left: 4px solid var(--gold);">
+        <div class="card-header">
+          <div>
+            <h2>Shared Windows Python PDF Server Connection (Encrypted Relay)</h2>
+            <div class="muted">Connect Cloudflare to ONE shared office Windows PC running the full PyMuPDF + ReportLab engine (Arial 9 pt, full 22-page CIF parsing, flattened packets, and shared SynologyDrive client folders). Multiple staff can use the same Python server simultaneously.</div>
+          </div>
+          <span class="tag tag-req" id="py-conn-badge">Checking Mode...</span>
+        </div>
+
+        <div id="py-conn-status" style="margin-bottom: 12px;"></div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="set-py-url">Python Server Cloudflare Tunnel URL (Overrides firm secret for this browser)</label>
+            <input type="url" id="set-py-url" placeholder="https://petition-api.yourdomain.com or https://xxxx.trycloudflare.com" />
+          </div>
+          <div class="field">
+            <label for="set-py-secret">Relay Secret (<code>X-Relay-Secret</code> printed by Windows Server Launcher)</label>
+            <input type="text" id="set-py-secret" placeholder="Paste Relay Secret from Start Shared Petition Server window" />
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-bottom: 14px;">
+          <button class="btn btn-primary" id="btn-save-py-conn">Save Connection</button>
+          <button class="btn btn-gold" id="btn-test-py-conn">Test Encrypted Connection (PC &rarr; Cloudflare &rarr; Python)</button>
+          <button class="btn btn-secondary" id="btn-clear-py-conn">Clear Browser Override</button>
+        </div>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:700; color:var(--navy); padding: 6px 0;">
+            Windows PC Server Setup Guide (One Shared Office PC for All Staff)
+          </summary>
+          <div style="margin-top: 10px; padding: 14px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; line-height: 1.55;">
+            <p style="margin-top:0;"><strong>Do we need one Python server per person?</strong><br/>
+            <strong>No!</strong> Run <strong>ONE shared Python server</strong> on a single always-on office Windows PC. FastAPI handles multiple concurrent staff requests cleanly and uses per-client folder locks so two users can work at the same time without conflicts. All generated packets are automatically saved to the shared <code>Clients\LastName,FirstName\</code> folder on the office PC (syncing via SynologyDrive) <em>and</em> returned encrypted as a downloadable <code>.zip</code> to whichever staff member clicked Generate.</p>
+
+            <p><strong>Automated One-Click Setup on the Host Windows PC:</strong></p>
+            <ol style="margin: 6px 0 12px 18px; padding: 0;">
+              <li>Install <strong>Python 3.12+</strong> from <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a> (check <em>"Add python.exe to PATH"</em>).</li>
+              <li>Double-click <code>Start Shared Petition Server (Cloudflare Tunnel).bat</code> in your <code>Wart</code> folder.</li>
+              <li>The script automatically:
+                <ul>
+                  <li>Installs any missing Python PDF libraries (<code>pymupdf</code>, <code>reportlab</code>, <code>fastapi</code>, <code>uvicorn</code>)</li>
+                  <li>Generates &amp; displays your private <strong>Relay Secret</strong> (saved in <code>petition_app\data\settings.json</code>)</li>
+                  <li>Starts the multi-user Python server on <code>http://127.0.0.1:8765</code></li>
+                  <li>Downloads <code>cloudflared.exe</code> automatically and opens an encrypted HTTPS tunnel</li>
+                </ul>
+              </li>
+              <li><strong>Share with ALL staff automatically (recommended):</strong> In your <strong>Cloudflare Dashboard &rarr; Workers &amp; Pages &rarr; your Worker &rarr; Settings &rarr; Variables and Secrets</strong>, add two encrypted secrets:
+                <ul>
+                  <li><code>PYTHON_BACKEND_URL</code> = your Tunnel HTTPS URL</li>
+                  <li><code>PYTHON_RELAY_SECRET</code> = the Relay Secret printed by the launcher</li>
+                </ul>
+                Once set in Cloudflare, <strong>every staff member automatically connects to the shared office PC</strong> with zero setup on their computers!
+              </li>
+              <li><strong>Make the URL permanent (so it never changes on reboot):</strong> In <strong>Cloudflare Zero Trust &rarr; Networks &rarr; Tunnels &rarr; Create a Tunnel</strong>, point a hostname (e.g., <code>petition-api.yourdomain.com</code>) to <code>http://127.0.0.1:8765</code>, and paste the tunnel token into <code>petition_app\data\tunnel_token.txt</code>. Re-running the <code>.bat</code> launcher will use that permanent URL automatically (and you can drop a shortcut to the <code>.bat</code> in <code>shell:startup</code> so it starts on boot).</li>
+            </ol>
+          </div>
+        </details>
+      </div>
+
       <div class="grid-2">
         <div class="card">
           <div class="card-header">
@@ -780,8 +843,8 @@
   <div id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="/crypto_client.js?v=1"></script>
-  <script src="/cf_engine.js?v=1"></script>
-  <script src="/app.js?v=3"></script>
+  <script src="/crypto_client.js?v=2"></script>
+  <script src="/cf_engine.js?v=2"></script>
+  <script src="/app.js?v=4"></script>
 </body>
 </html>

@@ -200,9 +200,11 @@ function toast(msg, kind = "") {
 }
 
 
-/* ==================== CLOUDFLARE PAGES + E2E AES-256-GCM ADAPTER ==================== */
+/* ==================== CLOUDFLARE + SHARED PYTHON SERVER (E2E AES-256-GCM) ADAPTER ==================== */
 const CF_SETTINGS_KEY = "mdfl_cf_settings_v1";
 const CF_CASES_KEY = "mdfl_cf_saved_cases_v1";
+const CF_PY_CONN_KEY = "mdfl_cf_python_conn_v1";
+let cfServerHasFirmBackend = false;
 
 function _cfLoadSettings() {
   const base = JSON.parse(JSON.stringify(window.CloudflarePetitionEngine.DEFAULT_SETTINGS));
@@ -211,6 +213,52 @@ function _cfLoadSettings() {
     if (saved) Object.assign(base, saved);
   } catch (_) {}
   return base;
+}
+
+function _cfGetPythonConn() {
+  try {
+    return JSON.parse(localStorage.getItem(CF_PY_CONN_KEY) || "{}") || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function _cfSetPythonConn(url, secret) {
+  localStorage.setItem(CF_PY_CONN_KEY, JSON.stringify({ url: (url || "").trim(), secret: (secret || "").trim() }));
+}
+
+function _cfUsePythonRelay() {
+  const conn = _cfGetPythonConn();
+  return Boolean((conn.url && conn.url.trim()) || cfServerHasFirmBackend);
+}
+
+function _cfWrapBackendMeta(payloadObj) {
+  const conn = _cfGetPythonConn();
+  const out = Object.assign({}, payloadObj);
+  if (conn.url) out._backend_url = conn.url;
+  if (conn.secret) out._relay_secret = conn.secret;
+  return out;
+}
+
+function _cfUpdateEngineBadges() {
+  const conn = _cfGetPythonConn();
+  const engPill = document.getElementById("hdr-engine");
+  const badge = document.getElementById("py-conn-badge");
+  const statusEl = document.getElementById("py-conn-status");
+
+  if (conn.url) {
+    if (engPill) { engPill.textContent = "Engine: Python PC (Custom URL)"; engPill.className = "pill pill-gold"; }
+    if (badge) { badge.textContent = "Connected via Browser URL"; badge.className = "tag tag-ok"; }
+    if (statusEl) statusEl.innerHTML = `<div class="alert alert-ok"><strong>Active Mode:</strong> Encrypted Cloudflare Relay &rarr; Python Server (<code>${esc(conn.url)}</code>). Uploads &amp; packets are AES-256-GCM encrypted in transit.</div>`;
+  } else if (cfServerHasFirmBackend) {
+    if (engPill) { engPill.textContent = "Engine: Shared Office Python PC"; engPill.className = "pill pill-ok"; }
+    if (badge) { badge.textContent = "Firm-Wide Shared Python Server"; badge.className = "tag tag-ok"; }
+    if (statusEl) statusEl.innerHTML = `<div class="alert alert-ok"><strong>Active Mode:</strong> Automatically connected to your firm's <strong>Shared Office Python Server</strong> (configured firm-wide via Cloudflare Secret <code>PYTHON_BACKEND_URL</code>). All staff share this connection!</div>`;
+  } else {
+    if (engPill) { engPill.textContent = "Engine: Cloudflare Standalone"; engPill.className = "pill"; }
+    if (badge) { badge.textContent = "Standalone Edge Mode"; badge.className = "tag tag-warn"; }
+    if (statusEl) statusEl.innerHTML = `<div class="alert alert-info"><strong>Active Mode:</strong> Cloudflare Standalone (in-browser <code>pdf-lib</code>). To use the full Windows PyMuPDF + ReportLab engine and shared office <code>Clients\\</code> folders, enter your Cloudflare Tunnel URL below or set <code>PYTHON_BACKEND_URL</code> in Cloudflare Secrets.</div>`;
+  }
 }
 
 function _cfLoadSavedCasesMap() {
@@ -233,9 +281,12 @@ async function cfApiAdapter(url, opts = {}) {
   const eng = window.CloudflarePetitionEngine;
   const settings = _cfLoadSettings();
 
-  // 1. Live MDFL announcements always come from Cloudflare Pages Function GET /api/updates
   if (url.startsWith("/api/updates")) {
     if (url.includes("check-forms") || url.includes("sync-forms")) {
+      if (_cfUsePythonRelay()) {
+        const sub = url.includes("sync-forms") ? "sync-forms" : "check-forms";
+        return window.PetitionCrypto.securePost(sub, _cfWrapBackendMeta({}));
+      }
       return {
         checked_at: new Date().toLocaleString(),
         total_checked: eng.FORM_CATALOG.filter((f) => f.file).length,
@@ -243,7 +294,7 @@ async function cfApiAdapter(url, opts = {}) {
         updated_count: 0,
         forms: eng.FORM_CATALOG.filter((f) => f.file).map((f) => ({
           file: f.file, status: "up_to_date", local_size: 0, remote_size: null,
-          note: "Served from GitHub -> Cloudflare Pages /Templates/",
+          note: "Served from GitHub -> Cloudflare /Templates/ (Connect Python server for live auto-updater)",
         })),
       };
     }
@@ -255,21 +306,31 @@ async function cfApiAdapter(url, opts = {}) {
   if (url === "/api/bootstrap") {
     let updates = { fetched_at: "", tampa_court_info: {}, announcements: [] };
     try { const r = await fetch("/api/updates"); if (r.ok) updates = await r.json(); } catch (_) {}
-    // Run E2E encryption handshake with Cloudflare Pages Function
     try {
       const hs = await window.PetitionCrypto.handshake();
+      cfServerHasFirmBackend = hs.backend_mode === "encrypted-python-relay";
       const pill = document.getElementById("hdr-e2e");
       if (pill) {
         pill.textContent = hs.requires_passphrase ? "🔒 E2E: AES-256-GCM (Firm Key)" : "🔒 E2E: AES-256-GCM (ECDH)";
         pill.className = "pill pill-ok";
       }
     } catch (_) {}
+    _cfUpdateEngineBadges();
+
+    let savedCases = _cfListSavedCases();
+    if (_cfUsePythonRelay()) {
+      try {
+        const r = await window.PetitionCrypto.securePost("cases-list", _cfWrapBackendMeta({}));
+        if (r && Array.isArray(r.saved_cases)) savedCases = r.saved_cases;
+      } catch (_) {}
+    }
+
     const filesMap = {};
     eng.FORM_CATALOG.filter((f) => f.file).forEach((f) => { filesMap[f.file] = { size: 0, source_page: `/Templates/${f.file}` }; });
     return {
       settings,
       form_catalog: eng.FORM_CATALOG,
-      saved_cases: _cfListSavedCases(),
+      saved_cases: savedCases,
       updates,
       manifest: { last_checked: new Date().toISOString().slice(0, 19), files: filesMap },
     };
@@ -305,15 +366,15 @@ async function cfApiAdapter(url, opts = {}) {
     const fd = opts.body;
     const file = fd.get("file");
     const chapter = fd.get("chapter") || "7";
-    // Step 1: Encrypt CIF PDF on client PC with AES-256-GCM -> send across internet -> decrypt on Cloudflare Pages!
-    let verifiedBytes;
-    try {
-      const secResp = await window.PetitionCrypto.secureUploadPdf(file, chapter);
-      if (secResp.case) return secResp; // Python relay mode returned parsed CaseData directly!
-      verifiedBytes = window.PetitionCrypto.b64Decode(secResp.pdf_base64);
-    } catch (encErr) {
-      throw new Error("Encrypted upload failed: " + encErr.message);
-    }
+    const arrBuf = await file.arrayBuffer();
+    const pdfBase64 = window.PetitionCrypto.b64Encode(new Uint8Array(arrBuf));
+    const secResp = await window.PetitionCrypto.securePost(
+      "cif-intake",
+      _cfWrapBackendMeta({ filename: file.name, chapter: String(chapter), pdf_base64: pdfBase64 })
+    );
+    // If routed to shared Python server, return the full 1,381-widget parsed CaseData directly!
+    if (secResp.case) return secResp;
+    const verifiedBytes = window.PetitionCrypto.b64Decode(secResp.pdf_base64);
     const parsedCase = await eng.parseCifBytes(verifiedBytes, file.name, chapter, settings, createBlankCase);
     return {
       case: parsedCase,
@@ -328,6 +389,14 @@ async function cfApiAdapter(url, opts = {}) {
   if (url === "/api/import-creditors") {
     const fd = opts.body;
     const file = fd.get("file");
+    if (_cfUsePythonRelay()) {
+      const arrBuf = await file.arrayBuffer();
+      const b64 = window.PetitionCrypto.b64Encode(new Uint8Array(arrBuf));
+      return window.PetitionCrypto.securePost(
+        "import-creditors",
+        _cfWrapBackendMeta({ filename: file.name, file_base64: b64 })
+      );
+    }
     const text = await file.text();
     const res = eng.parseCreditorsCsv(text);
     return { source: "csv", secured: res.secured, unsecured: res.unsecured, count: res.secured.length + res.unsecured.length };
@@ -335,13 +404,21 @@ async function cfApiAdapter(url, opts = {}) {
 
   if (url === "/api/generate") {
     const c = JSON.parse(opts.body || "{}");
-    // If Cloudflare Pages is connected to an encrypted Python backend, route via AES-256-GCM!
-    try {
-      const hs = await window.PetitionCrypto.handshake();
-      if (hs.backend_mode === "encrypted-python-relay") {
-        return await window.PetitionCrypto.securePost("generate", { case_data: c });
+    if (_cfUsePythonRelay()) {
+      const pyRes = await window.PetitionCrypto.securePost("generate", _cfWrapBackendMeta({ case_data: c }));
+      // Convert returned encrypted zip_base64 into an instant browser download!
+      if (pyRes.zip_base64) {
+        const zipBytes = window.PetitionCrypto.b64Decode(pyRes.zip_base64);
+        const zipBlob = new Blob([zipBytes], { type: "application/zip" });
+        pyRes.zip_url = URL.createObjectURL(zipBlob);
+        pyRes.zip_name = pyRes.zip_name || `${pyRes.folder_name || "Petition_Packet"}.zip`;
+        const a = document.createElement("a");
+        a.href = pyRes.zip_url;
+        a.download = pyRes.zip_name;
+        a.click();
       }
-    } catch (_) {}
+      return pyRes;
+    }
     const out = await eng.generatePetitionZip(c, settings);
     out.compliance = eng.runComplianceChecks(c, settings);
     out.saved_cases = _cfListSavedCases();
@@ -350,6 +427,9 @@ async function cfApiAdapter(url, opts = {}) {
 
   if (url === "/api/cases/save") {
     const c = JSON.parse(opts.body || "{}");
+    if (_cfUsePythonRelay()) {
+      return window.PetitionCrypto.securePost("cases-save", _cfWrapBackendMeta({ case_data: c }));
+    }
     const folder = eng.makeClientFolderName(c);
     const map = _cfLoadSavedCasesMap();
     map[folder] = {
@@ -362,11 +442,17 @@ async function cfApiAdapter(url, opts = {}) {
   }
 
   if (url === "/api/cases") {
+    if (_cfUsePythonRelay()) {
+      return window.PetitionCrypto.securePost("cases-list", _cfWrapBackendMeta({}));
+    }
     return { saved_cases: _cfListSavedCases() };
   }
 
   if (url.startsWith("/api/cases/")) {
     const folder = decodeURIComponent(url.replace("/api/cases/", ""));
+    if (_cfUsePythonRelay()) {
+      return window.PetitionCrypto.securePost("cases-load", _cfWrapBackendMeta({ folder_name: folder }));
+    }
     const rec = _cfLoadSavedCasesMap()[folder];
     if (!rec) throw new Error("Saved case not found in browser storage.");
     const c = rec.case;
@@ -1748,9 +1834,9 @@ async function generatePacket() {
         Client Folder: <code>${esc(res.client_dir)}</code> (${res.combined_pages} public pages, ${res.matrix_count} matrix creditors)
       </div>
       <div class="btn-group" style="margin-bottom: 12px;">
-        <a class="btn btn-primary" href="${dl(res.combined_pdf)}" target="_blank">Open Combined Public Petition PDF</a>
-        ${res.b121_restricted_pdf ? `<a class="btn btn-danger" href="${dl(res.b121_restricted_pdf)}" target="_blank">Open Restricted Form B121 (SSN)</a>` : ""}
-        <a class="btn btn-secondary" href="${dl(res.creditor_txt)}" target="_blank">View Creditor.txt</a>
+        ${res.processed_by === "python-server" ? "" : `<a class="btn btn-primary" href="${dl(res.combined_pdf)}" target="_blank">Open Combined Public Petition PDF</a>`}
+        ${res.b121_restricted_pdf && res.processed_by !== "python-server" ? `<a class="btn btn-danger" href="${dl(res.b121_restricted_pdf)}" target="_blank">Open Restricted Form B121 (SSN)</a>` : ""}
+        ${res.processed_by === "python-server" ? `<span class="tag tag-ok">Saved on Office Python PC + Downloaded as ZIP</span>` : `<a class="btn btn-secondary" href="${dl(res.creditor_txt)}" target="_blank">View Creditor.txt</a>`}
         ${res.zip_url ? `<a class="btn btn-gold" href="${res.zip_url}" download="${esc(res.zip_name || "Petition_Packet.zip")}">Download Full Client Folder (.zip)</a>` : `<button class="btn btn-gold" onclick="openFolderInExplorer('${esc(res.client_dir.replace(/\\/g, "\\\\"))}')">Open Client Folder in Explorer</button>`}
       </div>
       <details open>
@@ -2124,15 +2210,72 @@ function round2(v) {
 
 document.addEventListener("DOMContentLoaded", () => {
   init();
+
+  const conn = _cfGetPythonConn();
+  if (document.getElementById("set-py-url")) document.getElementById("set-py-url").value = conn.url || "";
+  if (document.getElementById("set-py-secret")) document.getElementById("set-py-secret").value = conn.secret || "";
+
   const e2ePill = document.getElementById("hdr-e2e");
   if (e2ePill && window.PetitionCrypto) {
     e2ePill.addEventListener("click", async () => {
       try {
-        toast("Testing AES-256-GCM encryption handshake with Cloudflare Pages...");
-        const pong = await window.PetitionCrypto.securePost("ping", { check: "MDFL-E2E-TEST", ts: Date.now() });
+        toast("Testing AES-256-GCM encryption handshake with Cloudflare...");
+        const pong = await window.PetitionCrypto.securePost("ping", _cfWrapBackendMeta({ check: "MDFL-E2E-TEST", ts: Date.now() }));
         toast(`Verified! Encrypted on PC -> Decrypted on ${pong.decrypted_on}`, "ok");
       } catch (err) {
         toast("E2E Test: " + err.message, "err");
+      }
+    });
+  }
+
+  const engPill = document.getElementById("hdr-engine");
+  if (engPill) engPill.addEventListener("click", () => switchTab("settings"));
+
+  const btnSavePy = document.getElementById("btn-save-py-conn");
+  if (btnSavePy) {
+    btnSavePy.addEventListener("click", async () => {
+      const u = (document.getElementById("set-py-url").value || "").trim();
+      const s = (document.getElementById("set-py-secret").value || "").trim();
+      _cfSetPythonConn(u, s);
+      _cfUpdateEngineBadges();
+      toast(u ? "Saved Python Server Tunnel URL!" : "Cleared custom URL (using firm default / standalone).", "ok");
+      try {
+        const res = await api("/api/cases");
+        state.savedCases = res.saved_cases || [];
+        renderSavedCases();
+      } catch (_) {}
+    });
+  }
+
+  const btnClearPy = document.getElementById("btn-clear-py-conn");
+  if (btnClearPy) {
+    btnClearPy.addEventListener("click", () => {
+      _cfSetPythonConn("", "");
+      if (document.getElementById("set-py-url")) document.getElementById("set-py-url").value = "";
+      if (document.getElementById("set-py-secret")) document.getElementById("set-py-secret").value = "";
+      _cfUpdateEngineBadges();
+      toast("Cleared browser Python override.", "ok");
+    });
+  }
+
+  const btnTestPy = document.getElementById("btn-test-py-conn");
+  if (btnTestPy) {
+    btnTestPy.addEventListener("click", async () => {
+      const u = (document.getElementById("set-py-url").value || "").trim();
+      const s = (document.getElementById("set-py-secret").value || "").trim();
+      if (u) _cfSetPythonConn(u, s);
+      _cfUpdateEngineBadges();
+      const st = document.getElementById("py-conn-status");
+      if (st) st.innerHTML = `<div class="alert alert-info">Testing AES-256-GCM encrypted route: Browser &rarr; Cloudflare Worker &rarr; Office Python Server...</div>`;
+      try {
+        const res = await window.PetitionCrypto.securePost("ping-backend", _cfWrapBackendMeta({}));
+        if (st) {
+          st.innerHTML = `<div class="alert alert-ok"><strong>Connected Successfully!</strong><br/>Engine: ${esc(res.engine)}<br/>Multi-User Ready: <strong>Yes</strong> &bull; Relay Secret Protected: <strong>${res.relay_secret_active ? "Yes" : "Optional"}</strong><br/>Clients Folder on Host PC: <code>${esc(res.clients_dir || "")}</code><br/>Route: ${esc(res.connected_via || "")}</div>`;
+        }
+        toast("Connected to Shared Office Python Server!", "ok");
+      } catch (err) {
+        if (st) st.innerHTML = `<div class="alert alert-err"><strong>Connection Failed:</strong> ${esc(err.message)}</div>`;
+        toast("Python server test failed: " + err.message, "err");
       }
     });
   }

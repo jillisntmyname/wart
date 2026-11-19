@@ -2233,14 +2233,111 @@ function renderExemptions() {
     : '<tr><td colspan="8" class="muted">Click <strong>"Auto-Apply Exemptions"</strong> or <strong>"Sync All Assets &rarr; Schedule C"</strong> to assign exemptions per asset.</td></tr>';
 }
 
+window.moveCreditorClass = (fromList, idx, targetClass) => {
+  const c = state.caseData;
+  if (!c) return;
+  const labelMap = {
+    secured: "Secured (Schedule D)",
+    priority: "Priority Unsecured (Schedule E)",
+    nonpriority: "Nonpriority Unsecured (Schedule F)",
+  };
+
+  if (fromList === "secured") {
+    if (targetClass === "secured") return;
+    const item = c.secured_creditors.splice(idx, 1)[0];
+    if (!item) return;
+    const isPri = targetClass === "priority";
+    const desc = String(item.collateral_desc || "");
+    const claimType = isPri
+      ? (/tax|irs/i.test(desc + " " + item.name) ? "Taxes" : /dso|child|alimony|support/i.test(desc + " " + item.name) ? "DSO" : "Other")
+      : (/student|navient|mohela|nelnet|edfinancial|aidvantage/i.test(desc + " " + item.name) ? "StudentLoan" : "Other");
+    c.unsecured_creditors.push({
+      priority: isPri,
+      name: item.name || "",
+      attn: item.attn || "Attn: Bankruptcy",
+      street: item.street || "",
+      city: item.city || "",
+      state: item.state || "",
+      zip_code: item.zip_code || "",
+      account_last4: item.account_last4 || "",
+      date_incurred: item.date_incurred || "",
+      total_claim: Number(item.claim_amount || 0),
+      priority_amount: isPri ? Number(item.claim_amount || 0) : 0,
+      owner: item.owner || "debtor1",
+      claim_type: claimType,
+      claim_type_specify: desc || (isPri ? "Priority Claim" : "CreditCard"),
+      contingent: !!item.contingent,
+      unliquidated: !!item.unliquidated,
+      disputed: !!item.disputed,
+      notice_parties: item.notice_parties || [],
+    });
+    renderSecuredCreditors();
+    renderUnsecuredCreditors();
+    scheduleRecalc(false);
+    toast(`Moved "${item.name || "Creditor"}" → ${labelMap[targetClass]}`, "ok");
+    return;
+  }
+
+  if (fromList === "unsecured") {
+    const item = c.unsecured_creditors[idx];
+    if (!item) return;
+    if (targetClass === "secured") {
+      c.unsecured_creditors.splice(idx, 1);
+      c.secured_creditors.push({
+        name: item.name || "",
+        attn: item.attn || "Attn: Bankruptcy",
+        street: item.street || "",
+        city: item.city || "",
+        state: item.state || "",
+        zip_code: item.zip_code || "",
+        account_last4: item.account_last4 || "",
+        date_incurred: item.date_incurred || "",
+        collateral_desc: item.claim_type_specify || item.claim_type || "",
+        claim_amount: Number(item.total_claim || 0),
+        collateral_value: 0,
+        owner: item.owner || "debtor1",
+        lien_type: "agreement",
+        intent: "Keep",
+        contingent: !!item.contingent,
+        unliquidated: !!item.unliquidated,
+        disputed: !!item.disputed,
+        notice_parties: item.notice_parties || [],
+      });
+      renderSecuredCreditors();
+      renderUnsecuredCreditors();
+      scheduleRecalc(false);
+      toast(`Moved "${item.name || "Creditor"}" → ${labelMap.secured}`, "ok");
+      return;
+    }
+
+    const isPri = targetClass === "priority";
+    item.priority = isPri;
+    item.priority_amount = isPri ? Number(item.total_claim || 0) : 0;
+    const validTypes = isPri ? ["Taxes", "DSO", "DUI", "Other"] : ["Other", "StudentLoan", "Divorce", "Pension"];
+    if (!validTypes.includes(item.claim_type)) {
+      item.claim_type = isPri ? "Taxes" : "Other";
+    }
+    renderUnsecuredCreditors();
+    scheduleRecalc(false);
+    toast(`Moved "${item.name || "Creditor"}" → ${labelMap[targetClass]}`, "ok");
+  }
+};
+
 function renderSecuredCreditors() {
   const arr = state.caseData.secured_creditors || [];
   $("secured-list").innerHTML = arr.length
     ? arr.map((sc, i) => `
       <div class="subcard">
-        <div class="subcard-head">
-          <strong>Secured #${i + 1}: ${esc(sc.name || "New Secured Creditor")}</strong>
-          <button class="btn btn-danger btn-sm" onclick="removeArr('secured_creditors',${i})">Remove</button>
+        <div class="subcard-head" style="flex-wrap:wrap; gap:8px;">
+          <strong>[SECURED Sch. D] #${i + 1}: ${esc(sc.name || "New Secured Creditor")}</strong>
+          <div class="btn-group" style="align-items:center;">
+            <select style="font-size:12px; padding:4px 8px;" title="Move creditor to another schedule" onchange="moveCreditorClass('secured',${i},this.value)">
+              <option value="secured" selected>Secured (Schedule D)</option>
+              <option value="priority">Move &rarr; Priority (Schedule E)</option>
+              <option value="nonpriority">Move &rarr; Nonpriority (Schedule F)</option>
+            </select>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeArr('secured_creditors',${i})">Remove</button>
+          </div>
         </div>
         <div class="grid-4">
           <div class="field"><label>Creditor Name</label><input type="text" value="${esc(sc.name)}" onchange="updateArr('secured_creditors',${i},'name',this.value)"/></div>
@@ -2269,11 +2366,18 @@ function renderUnsecuredCreditors() {
   $("unsecured-list").innerHTML = arr.length
     ? arr.map((uc, i) => `
       <div class="subcard">
-        <div class="subcard-head">
+        <div class="subcard-head" style="flex-wrap:wrap; gap:8px;">
           <div>
             <strong>${uc.priority ? "[PRIORITY Sch. E]" : "[NONPRIORITY Sch. F]"} #${i + 1}: ${esc(uc.name || "New Creditor")}</strong>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="removeArr('unsecured_creditors',${i})">Remove</button>
+          <div class="btn-group" style="align-items:center;">
+            <select style="font-size:12px; padding:4px 8px;" title="Move creditor to another schedule" onchange="moveCreditorClass('unsecured',${i},this.value)">
+              <option value="secured">Move &rarr; Secured (Schedule D)</option>
+              <option value="priority" ${uc.priority ? "selected" : ""}>Priority (Schedule E)</option>
+              <option value="nonpriority" ${!uc.priority ? "selected" : ""}>Nonpriority (Schedule F)</option>
+            </select>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeArr('unsecured_creditors',${i})">Remove</button>
+          </div>
         </div>
         <div class="grid-4">
           <div class="field"><label>Creditor Name</label><input type="text" value="${esc(uc.name)}" onchange="updateArr('unsecured_creditors',${i},'name',this.value)"/></div>
@@ -2285,9 +2389,10 @@ function renderUnsecuredCreditors() {
           <div class="field"><label>Acct Last 4</label><input type="text" maxlength="4" value="${esc(uc.account_last4)}" onchange="updateArr('unsecured_creditors',${i},'account_last4',this.value)"/></div>
           <div class="field"><label>Total Claim ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(uc.total_claim))}" onchange="updateArrNum('unsecured_creditors',${i},'total_claim',this.value)"/></div>
           <div class="field"><label>Schedule Class</label>
-            <select onchange="updateArr('unsecured_creditors',${i},'priority',this.value==='true');renderUnsecuredCreditors();">
-              <option value="false" ${!uc.priority ? "selected" : ""}>Nonpriority (Schedule F)</option>
-              <option value="true" ${uc.priority ? "selected" : ""}>Priority (Schedule E)</option>
+            <select onchange="moveCreditorClass('unsecured',${i},this.value)">
+              <option value="secured">Secured (Schedule D)</option>
+              <option value="priority" ${uc.priority ? "selected" : ""}>Priority (Schedule E)</option>
+              <option value="nonpriority" ${!uc.priority ? "selected" : ""}>Nonpriority (Schedule F)</option>
             </select>
           </div>
           <div class="field"><label>Debt Type</label>

@@ -5,6 +5,7 @@
 
 const STORAGE_KEY_CASE = "flmb_ch13_means_test_case_v2";
 const STORAGE_KEY_STANDARDS = "flmb_ch13_custom_standards_v1";
+let _suppressParentNotify = false;
 
 // Deep clone helper
 function clone(obj) {
@@ -2523,6 +2524,17 @@ function updateAllViews(options = {}) {
     renderDeductionsTab(calc);
   }
   renderClientAndWorksheetReport(calc);
+
+  // Automatic real-time sync back to parent Petition App whenever embedded
+  if (!_suppressParentNotify && window.parent && window.parent !== window) {
+    try {
+      window.parent.postMessage({
+        type: "FLMB_MEANS_TEST_UPDATE",
+        caseState: clone(caseState),
+        calc,
+      }, "*");
+    } catch (_) {}
+  }
 }
 
 // ============================================================================
@@ -3038,6 +3050,75 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Initial Render
-  updateAllViews();
+  // Embedded mode detection + live two-way message bridge with Petition App
+  if (window.self !== window.top) {
+    const standaloneBtn = document.getElementById("btnStandalonePetitionSuite");
+    if (standaloneBtn) standaloneBtn.style.display = "none";
+    const syncBadge = document.getElementById("embeddedSyncBadge");
+    if (syncBadge) syncBadge.style.display = "inline-flex";
+  }
+
+  window.addEventListener("message", (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.type !== "PETITION_PUSH_TO_MEANS_TEST" || !msg.payload) return;
+    const p = msg.payload;
+    _suppressParentNotify = true;
+    try {
+      if (msg.replaceAll) {
+        caseState = clone(p);
+      } else {
+        // Incremental merge: always sync names, filing metadata, household, secured/priority — preserve YTD/paystub logs!
+        const scalarKeys = [
+          "clientName", "spouseName", "caseNumber", "filingStatus", "filingDate",
+          "tampaCounty", "householdSize", "membersUnder65", "members65Plus",
+          "dependentChildrenUnder18", "vehicleCount", "enableDebtor2",
+          "firmName", "attorneyName", "firmContact"
+        ];
+        scalarKeys.forEach((k) => {
+          if (p[k] !== undefined) caseState[k] = p[k];
+        });
+        if (p.securedAndPriority) {
+          caseState.securedAndPriority = Object.assign({}, caseState.securedAndPriority, p.securedAndPriority);
+        }
+        if (p.earners) {
+          ["d1", "d2"].forEach((ek) => {
+            if (!caseState.earners[ek]) caseState.earners[ek] = clone(p.earners[ek]);
+            else {
+              if (p.earners[ek].employerName) caseState.earners[ek].employerName = p.earners[ek].employerName;
+              // Only overwrite manual earnings if earner is still in manual mode (never clobber YTD/paystubs!)
+              if (caseState.earners[ek].mode === "manual" && p.earners[ek].manual) {
+                caseState.earners[ek].manual = Object.assign({}, caseState.earners[ek].manual, p.earners[ek].manual);
+              }
+            }
+          });
+        }
+        if (p.otherIncome) {
+          // Only fill non-zero petition otherIncome values if user hasn't entered higher/custom ones
+          Object.keys(p.otherIncome).forEach((k) => {
+            if (k === "maritalAdjustment" && Number(p.otherIncome[k]) > 0) {
+              caseState.otherIncome[k] = p.otherIncome[k];
+            } else if (Number(caseState.otherIncome[k] || 0) === 0 && Number(p.otherIncome[k] || 0) > 0) {
+              caseState.otherIncome[k] = p.otherIncome[k];
+            }
+          });
+        }
+      }
+      updateAllViews();
+    } finally {
+      _suppressParentNotify = false;
+    }
+  });
+
+  // Initial Render (suppress initial bounce until parent hands us the active client!)
+  _suppressParentNotify = window.self !== window.top;
+  try {
+    updateAllViews();
+  } finally {
+    _suppressParentNotify = false;
+  }
+  if (window.parent && window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: "FLMB_MEANS_TEST_READY" }, "*");
+    } catch (_) {}
+  }
 });

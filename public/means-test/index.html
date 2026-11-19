@@ -22,7 +22,8 @@
         </div>
       </div>
       <div class="header-actions">
-        <a href="petition.html" class="btn btn-sm" style="background:#38bdf8; color:#0f172a; font-weight:700;" title="Open the full 22-Page Intake & Ch. 7 / Ch. 13 Petition Creation Suite">
+        <span id="embeddedSyncBadge" style="display:none; background:#15803d; color:#ffffff; font-weight:700; padding:6px 10px; border-radius:6px; font-size:12px;">&#128260; Live Auto-Sync with Petition</span>
+        <a id="btnStandalonePetitionSuite" href="petition.html" class="btn btn-sm" style="background:#38bdf8; color:#0f172a; font-weight:700;" title="Open the full 22-Page Intake & Ch. 7 / Ch. 13 Petition Creation Suite">
           📋 Full Ch. 7 / 13 Petition Suite
         </a>
         <button class="btn btn-sm" id="btnNewBlankClient" style="background:#ef4444; color:#ffffff; border-color:#dc2626;" title="Clear all current client figures and start a fresh blank client">
@@ -147,7 +148,7 @@
             <div class="form-grid">
               <div class="form-group">
                 <label class="form-label" for="clientName">Debtor 1 Full Name</label>
-                <input type="text" id="clientName" class="form-control" placeholder="e.g., Maria &amp; Carlos Rodriguez" />
+                <input type="text" id="clientName" class="form-control" placeholder="e.g., Maria Rodriguez" />
               </div>
               <div class="form-group">
                 <label class="form-label" for="spouseName">Debtor 2 / Non-Filing Spouse Name</label>

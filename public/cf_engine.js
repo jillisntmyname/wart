@@ -515,11 +515,43 @@ window.CloudflarePetitionEngine = (() => {
         ? { level: "warn", code: "MEANS_TEST", title: `Above FL Median Income (${fmtDollar(totals.annualized_cmi)} vs ${fmtDollar(totals.fl_median_income)})`, detail: String(c.chapter) === "7" ? "Form 122A-2 auto-selected." : "5-year commitment period (Form 122C-2 auto-selected)." }
         : { level: "ok", code: "MEANS_TEST", title: `Below FL Median Income (${fmtDollar(totals.annualized_cmi)} <= ${fmtDollar(totals.fl_median_income)})`, detail: String(c.chapter) === "7" ? "No presumption of abuse." : "3-year applicable commitment period." }
     );
-    checks.push(
-      c.credit_counseling_completed
-        ? { level: "ok", code: "CC_CERT", title: `Pre-Filing Credit Counseling Complete (${c.credit_counseling_agency || "Debtorcc.org"})`, detail: "Remember to file the Debtorcc.org certificate separately on CM/ECF." }
-        : { level: "error", code: "CC_CERT", title: "Credit Counseling Certificate Required (11 U.S.C. § 109(h))", detail: "Complete briefing via Debtorcc.org within 180 days prior to filing." }
-    );
+    const _parseFlexDate = (raw) => {
+      const s = String(raw || "").trim();
+      if (!s) return null;
+      let m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+      if (m) {
+        let yr = parseInt(m[3], 10);
+        if (yr < 100) yr += yr > (new Date().getFullYear() % 100) + 5 ? 1900 : 2000;
+        const d = new Date(yr, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (m) {
+        const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      return null;
+    };
+    const ccDt = _parseFlexDate(c.credit_counseling_date);
+    const filDt = _parseFlexDate(c.filing_date) || new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    if (!c.credit_counseling_completed) {
+      checks.push({ level: "error", code: "CC_CERT", title: "Credit Counseling Certificate Required (11 U.S.C. § 109(h))", detail: "Complete briefing via Debtorcc.org within 180 days prior to filing." });
+    } else if (!ccDt) {
+      checks.push({ level: "warn", code: "CC_DATE_MISSING", title: "Credit Counseling Date Not Entered", detail: "Enter the Credit Counseling completion date on Tab 1 to verify the 180-day statutory window (11 U.S.C. § 109(h))." });
+    } else {
+      const days = Math.round((filDt.getTime() - ccDt.getTime()) / 86400000);
+      const exp = new Date(ccDt.getTime() + 180 * 86400000);
+      const expStr = `${String(exp.getMonth() + 1).padStart(2, "0")}/${String(exp.getDate()).padStart(2, "0")}/${exp.getFullYear()}`;
+      if (days > 180) {
+        checks.push({ level: "error", code: "CC_180_EXPIRED", title: `Credit Counseling EXPIRED (${days} days > 180-day limit)`, detail: `Certificate dated ${c.credit_counseling_date} expired on ${expStr}. Under 11 U.S.C. § 109(h), the debtor MUST retake credit counseling via Debtorcc.org before filing!` });
+      } else if (days < 0) {
+        checks.push({ level: "error", code: "CC_AFTER_FILING", title: `Credit Counseling Date (${c.credit_counseling_date}) is AFTER Filing Date`, detail: "Under 11 U.S.C. § 109(h), credit counseling must be completed on or before the filing date." });
+      } else if (days >= 165) {
+        checks.push({ level: "warn", code: "CC_EXPIRING_SOON", title: `Credit Counseling Expiring Soon (${days}/180 days — ${180 - days} day(s) left)`, detail: `Certificate expires on ${expStr}. File on or before ${expStr} or obtain a fresh certificate from Debtorcc.org.` });
+      } else {
+        checks.push({ level: "ok", code: "CC_CERT", title: `Credit Counseling Valid (${days} of 180 days — expires ${expStr})`, detail: `Certificate (${c.credit_counseling_agency || "Debtorcc.org"}) is within the 180-day window. File separately on CM/ECF.` });
+      }
+    }
     const scheme = String(c.exemption_scheme || "FL").toUpperCase();
     if (scheme !== "FL") {
       checks.push({

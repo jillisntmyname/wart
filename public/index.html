@@ -19,6 +19,7 @@
     <div class="topbar-meta">
       <span class="pill pill-gold" id="hdr-folder">Folder: Unnamed,Client</span>
       <span class="pill" id="hdr-chapter">Chapter 7</span>
+      <span class="pill" id="hdr-autosave" title="Automatic save & multi-user sync status">Auto-Save: Ready</span>
       <span class="pill pill-ok" id="hdr-e2e" style="cursor:pointer;" title="Click to test End-to-End AES-256-GCM Encryption with Cloudflare">🔒 E2E: AES-256-GCM</span>
       <span class="pill" id="hdr-engine" style="cursor:pointer;" title="Active PDF Engine (click to configure in Settings)">Engine: Checking...</span>
       <span class="pill pill-ok" id="hdr-compliance">Compliance: Ready</span>
@@ -135,6 +136,7 @@
           <label class="check-row"><input type="checkbox" id="f-military" /> Military Service (Form 2020)</label>
           <label class="check-row"><input type="checkbox" id="f-sole-prop" /> Sole Proprietor</label>
         </div>
+        <div id="cc-date-warning" style="margin-top: 10px;"></div>
       </div>
 
       <!-- Debtor 1 & Debtor 2 -->
@@ -922,7 +924,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="/exemptions_catalog.js?v=1"></script>
   <script src="/crypto_client.js?v=2"></script>
-  <script src="/cf_engine.js?v=4"></script>
-  <script src="/app.js?v=8"></script>
+  <script src="/cf_engine.js?v=5"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

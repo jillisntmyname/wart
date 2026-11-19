@@ -1,6 +1,22 @@
 /* MDFL Tampa Division Bankruptcy Petition Program — Frontend Controller */
 "use strict";
 
+const SESSION_DRAFT_KEY = "mdfl_active_working_case_v1";
+const SESSION_EDITOR_KEY = "mdfl_editor_tab_id_v1";
+
+function _getOrCreateEditorId() {
+  try {
+    let id = sessionStorage.getItem(SESSION_EDITOR_KEY);
+    if (!id) {
+      id = "Staff-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+      sessionStorage.setItem(SESSION_EDITOR_KEY, id);
+    }
+    return id;
+  } catch (_) {
+    return "Staff-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  }
+}
+
 const state = {
   settings: null,
   formCatalog: [],
@@ -10,6 +26,16 @@ const state = {
   updatesFilter: "ALL",
   manifest: null,
   caseData: null,
+  baseCaseSnapshot: null,
+  baseRevision: null,
+  activeFolder: "",
+  activeTab: "import",
+  editorId: _getOrCreateEditorId(),
+  dirty: false,
+  autoSaveTimer: null,
+  inputPersistTimer: null,
+  savingInFlight: false,
+  pendingResave: false,
   totals: {},
   compliance: [],
   folderName: "Unnamed,Client",
@@ -585,19 +611,33 @@ async function cfApiAdapter(url, opts = {}) {
   }
 
   if (url === "/api/cases/save") {
-    const c = JSON.parse(opts.body || "{}");
+    const raw = JSON.parse(opts.body || "{}");
     if (_cfUsePythonRelay()) {
-      return window.PetitionCrypto.securePost("cases-save", _cfWrapBackendMeta({ case_data: c }));
+      const envPayload = raw && raw.case ? raw : { case: raw };
+      return window.PetitionCrypto.securePost("cases-save", _cfWrapBackendMeta(envPayload));
     }
+    const c = raw && raw.case ? raw.case : raw;
     const folder = eng.makeClientFolderName(c);
     const map = _cfLoadSavedCasesMap();
+    const prevRev = Number(map[folder]?.case?.revision || 0);
+    c.revision = prevRev + 1;
+    c.last_saved_at = new Date().toLocaleString();
     map[folder] = {
       case: c,
       debtor_name: `${c.debtor1?.first_name || ""} ${c.debtor1?.last_name || ""}`.trim() || folder,
-      updated_at: new Date().toLocaleString(),
+      updated_at: c.last_saved_at,
     };
     localStorage.setItem(CF_CASES_KEY, JSON.stringify(map));
-    return { folder_name: folder, path: `Browser Storage/${folder}`, saved_cases: _cfListSavedCases() };
+    return {
+      folder_name: folder,
+      path: `Browser Storage/${folder}`,
+      revision: c.revision,
+      last_saved_at: c.last_saved_at,
+      merged: false,
+      merged_fields: [],
+      case: c,
+      saved_cases: _cfListSavedCases(),
+    };
   }
 
   if (url === "/api/cases") {
@@ -706,8 +746,28 @@ async function init() {
     renderSavedCases();
     renderUpdates();
     renderTemplatesManifest();
+
+    // Restore active working draft across page refreshes so F5 NEVER wipes out entered data!
+    const restored = restoreWorkingSession();
     renderAllCaseUI();
-    await recalculate(true);
+    await recalculate(!restored);
+    if (restored) {
+      pushCaseToMeansTest({ replaceAll: true, silent: true });
+      if (state.activeTab && state.activeTab !== "import") {
+        switchTab(state.activeTab);
+      }
+      if (state.activeFolder) {
+        checkAndSyncRemoteChanges();
+      }
+      setAutoSaveBadge(
+        state.dirty ? "Restored Draft (Auto-Saving...)" : `Restored (${state.activeFolder || "Working Draft"})`,
+        state.dirty ? "pill-gold" : "pill-ok"
+      );
+      if (state.dirty && hasSaveableClientName(state.caseData)) {
+        scheduleAutoSave(800);
+      }
+    }
+    startConcurrentSyncPoller();
   } catch (err) {
     toast("Startup error: " + err.message, "err");
   }
@@ -720,6 +780,8 @@ function setupTabs() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       $(`tab-${btn.dataset.tab}`).classList.add("active");
+      state.activeTab = btn.dataset.tab;
+      persistWorkingSession();
       if (btn.dataset.tab === "means") {
         pushCaseToMeansTest({ replaceAll: false, silent: true });
       }
@@ -907,6 +969,7 @@ function populateScalarsFromCase() {
   $("mt-notes").value = mt.external_notes || "";
   $("mt-site-url").value = state.settings?.means_test_url || "";
   formatAllFieldsInDOM();
+  updateCreditCounselingWarning();
 }
 
 function syncScalarsToCase() {
@@ -1103,10 +1166,246 @@ function syncScalarsToCase() {
   mt.monthly_disposable_income = num($("mt-disposable").value);
   mt.exempt_from_means_test = $("mt-exempt").checked;
   mt.external_notes = $("mt-notes").value;
+  updateCreditCounselingWarning();
+}
+
+/* ==================== 180-DAY CREDIT COUNSELING WARNING ==================== */
+function _parseDateMDY(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    let yr = parseInt(m[3], 10);
+    if (yr < 100) yr += yr > (new Date().getFullYear() % 100) + 5 ? 1900 : 2000;
+    const d = new Date(yr, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const digits = s.replace(/\D/g, "");
+  if (digits.length === 8) {
+    const d = new Date(parseInt(digits.slice(4, 8), 10), parseInt(digits.slice(0, 2), 10) - 1, parseInt(digits.slice(2, 4), 10));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function updateCreditCounselingWarning() {
+  const box = $("cc-date-warning");
+  if (!box) return;
+  const ccRaw = $("f-cc-date")?.value || state.caseData?.credit_counseling_date || "";
+  const filRaw = $("f-filing-date")?.value || state.caseData?.filing_date || "";
+  const ccDone = $("f-cc-done") ? $("f-cc-done").checked : !!state.caseData?.credit_counseling_completed;
+
+  if (!ccDone) {
+    box.innerHTML = `<div class="alert alert-err" style="margin-bottom:0;"><strong>Credit Counseling Required (11 U.S.C. &sect; 109(h)):</strong> Debtor must complete pre-filing credit counseling (e.g., Debtorcc.org) within 180 days prior to filing.</div>`;
+    return;
+  }
+  const ccDt = _parseDateMDY(ccRaw);
+  if (!ccDt) {
+    box.innerHTML = "";
+    return;
+  }
+  const today = new Date();
+  const filDt = _parseDateMDY(filRaw) || new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((filDt.getTime() - ccDt.getTime()) / 86400000);
+  const exp = new Date(ccDt.getTime() + 180 * 86400000);
+  const expStr = `${String(exp.getMonth() + 1).padStart(2, "0")}/${String(exp.getDate()).padStart(2, "0")}/${exp.getFullYear()}`;
+  const ccStr = `${String(ccDt.getMonth() + 1).padStart(2, "0")}/${String(ccDt.getDate()).padStart(2, "0")}/${ccDt.getFullYear()}`;
+  const filStr = `${String(filDt.getMonth() + 1).padStart(2, "0")}/${String(filDt.getDate()).padStart(2, "0")}/${filDt.getFullYear()}`;
+
+  if (days > 180) {
+    box.innerHTML = `<div class="alert alert-err" style="margin-bottom:0;"><strong>&#9888; CREDIT COUNSELING EXPIRED (${days} days &gt; 180-day limit under 11 U.S.C. &sect; 109(h)):</strong> Certificate dated <strong>${esc(ccStr)}</strong> expired on <strong>${esc(expStr)}</strong> (filing date: ${esc(filStr)}). The debtor <strong>MUST</strong> retake credit counseling via Debtorcc.org before filing!</div>`;
+  } else if (days < 0) {
+    box.innerHTML = `<div class="alert alert-err" style="margin-bottom:0;"><strong>&#9888; INVALID CREDIT COUNSELING DATE:</strong> Completion date (<strong>${esc(ccStr)}</strong>) is AFTER the filing date (<strong>${esc(filStr)}</strong>). Under 11 U.S.C. &sect; 109(h), counseling must be completed on or before filing.</div>`;
+  } else if (days >= 165) {
+    box.innerHTML = `<div class="alert alert-warn" style="margin-bottom:0;"><strong>&#9888; Credit Counseling Expiring Soon:</strong> <strong>${days} of 180 days</strong> elapsed (${180 - days} day(s) remaining). Certificate dated ${esc(ccStr)} expires on <strong>${esc(expStr)}</strong>.</div>`;
+  } else {
+    box.innerHTML = `<div class="alert alert-ok" style="margin-bottom:0; padding:6px 12px; font-size:12px;">&#10003; Credit Counseling Valid: <strong>${days} of 180 days</strong> elapsed (Certificate ${esc(ccStr)} valid through <strong>${esc(expStr)}</strong>).</div>`;
+  }
+}
+
+/* ==================== AUTO-SAVE, REFRESH PERSISTENCE & MULTI-USER MERGE ==================== */
+function hasSaveableClientName(c) {
+  if (!c || !c.debtor1) return false;
+  return Boolean((c.debtor1.last_name || "").trim() || (c.debtor1.first_name || "").trim() || (c.debtor1.full_name || "").trim());
+}
+
+function setAutoSaveBadge(text, cls = "") {
+  const el = $("hdr-autosave");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+}
+
+function persistWorkingSession() {
+  if (!state.caseData) return;
+  try {
+    sessionStorage.setItem(SESSION_DRAFT_KEY, JSON.stringify({
+      caseData: state.caseData,
+      baseCaseSnapshot: state.baseCaseSnapshot,
+      baseRevision: state.baseRevision,
+      activeFolder: state.activeFolder,
+      activeTab: state.activeTab,
+      dirty: state.dirty,
+      savedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+function restoreWorkingSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_DRAFT_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.caseData || typeof saved.caseData !== "object") return false;
+    // Merge onto a fresh blank case so any newly added schema fields exist
+    const blank = createBlankCase(saved.caseData.chapter || "7");
+    state.caseData = Object.assign(blank, saved.caseData);
+    state.caseData.debtor1 = Object.assign(blank.debtor1, saved.caseData.debtor1 || {});
+    state.caseData.debtor2 = Object.assign(blank.debtor2, saved.caseData.debtor2 || {});
+    state.caseData.personal_assets = Object.assign(blank.personal_assets, saved.caseData.personal_assets || {});
+    state.caseData.income_debtor1 = Object.assign(blank.income_debtor1, saved.caseData.income_debtor1 || {});
+    state.caseData.income_debtor2 = Object.assign(blank.income_debtor2, saved.caseData.income_debtor2 || {});
+    state.caseData.expenses = Object.assign(blank.expenses, saved.caseData.expenses || {});
+    state.caseData.sofa = Object.assign(blank.sofa, saved.caseData.sofa || {});
+    state.caseData.means_test = Object.assign(blank.means_test, saved.caseData.means_test || {});
+    state.caseData.attorney_fees = Object.assign(blank.attorney_fees, saved.caseData.attorney_fees || {});
+    state.baseCaseSnapshot = saved.baseCaseSnapshot || null;
+    state.baseRevision = saved.baseRevision ?? null;
+    state.activeFolder = saved.activeFolder || "";
+    state.activeTab = saved.activeTab || "import";
+    state.dirty = !!saved.dirty;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function clearWorkingSession() {
+  try { sessionStorage.removeItem(SESSION_DRAFT_KEY); } catch (_) {}
+  state.baseCaseSnapshot = null;
+  state.baseRevision = null;
+  state.activeFolder = "";
+  state.dirty = false;
+  clearTimeout(state.autoSaveTimer);
+  setAutoSaveBadge("Auto-Save: Ready", "");
+}
+
+function markDirtyAndScheduleAutoSave() {
+  state.dirty = true;
+  persistWorkingSession();
+  if (hasSaveableClientName(state.caseData)) {
+    setAutoSaveBadge("Auto-Save: Pending...", "pill-gold");
+    scheduleAutoSave(1800);
+  } else {
+    setAutoSaveBadge("Tab Draft Saved (Enter Name for Folder)", "");
+  }
+}
+
+function scheduleAutoSave(delayMs = 1800) {
+  clearTimeout(state.autoSaveTimer);
+  state.autoSaveTimer = setTimeout(() => {
+    if (state.dirty && hasSaveableClientName(state.caseData)) {
+      saveDraft({ silent: true });
+    }
+  }, delayMs);
+}
+
+function renderAllCaseUIPreservingFocus() {
+  const activeEl = document.activeElement;
+  const activeId = activeEl && activeEl.id ? activeEl.id : null;
+  const activeVal = activeId && "value" in activeEl ? activeEl.value : null;
+  const selStart = activeId && typeof activeEl.selectionStart === "number" ? activeEl.selectionStart : null;
+  const selEnd = activeId && typeof activeEl.selectionEnd === "number" ? activeEl.selectionEnd : null;
+
+  renderAllCaseUI();
+
+  if (activeId) {
+    const restored = $(activeId);
+    if (restored) {
+      if (activeVal !== null && restored.value !== activeVal) {
+        // Keep the user's in-progress typing in the single field they're actively editing
+        restored.value = activeVal;
+      }
+      try {
+        restored.focus();
+        if (selStart !== null && selEnd !== null && typeof restored.setSelectionRange === "function") {
+          restored.setSelectionRange(selStart, selEnd);
+        }
+      } catch (_) {}
+    }
+  }
+}
+
+async function checkAndSyncRemoteChanges() {
+  if (!state.activeFolder || state.savingInFlight || document.hidden) return;
+  try {
+    const res = await api("/api/cases");
+    const list = res.saved_cases || [];
+    state.savedCases = list;
+    const match = list.find((item) => item.folder_name === state.activeFolder);
+    if (!match || match.revision === undefined || state.baseRevision === null) return;
+    if (Number(match.revision) > Number(state.baseRevision)) {
+      if (state.dirty) {
+        // Both coworker and this user edited -> trigger server 3-way merge automatically!
+        await saveDraft({ silent: true });
+      } else {
+        // Only coworker edited -> seamlessly pull their newer revision!
+        const loaded = await api(`/api/cases/${encodeURIComponent(state.activeFolder)}`);
+        if (loaded && loaded.case) {
+          state.caseData = loaded.case;
+          state.baseCaseSnapshot = JSON.parse(JSON.stringify(loaded.case));
+          state.baseRevision = Number(loaded.case.revision || match.revision);
+          state.totals = loaded.totals || state.totals;
+          state.compliance = loaded.compliance || state.compliance;
+          state.matrixPreview = loaded.matrix_preview || state.matrixPreview;
+          renderAllCaseUIPreservingFocus();
+          updateHeaderAndMetrics();
+          renderCompliance();
+          renderMatrixPreview();
+          renderSavedCases();
+          persistWorkingSession();
+          const tStr = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+          setAutoSaveBadge(`Synced Coworker Edits (${tStr}, Rev #${state.baseRevision})`, "pill-ok");
+          toast(`Synced coworker's updates to ${state.activeFolder} (Rev #${state.baseRevision})`, "ok");
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+function startConcurrentSyncPoller() {
+  if (startConcurrentSyncPoller._started) return;
+  startConcurrentSyncPoller._started = true;
+  setInterval(() => {
+    checkAndSyncRemoteChanges();
+  }, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (state.dirty) {
+        syncScalarsToCase();
+        persistWorkingSession();
+        if (hasSaveableClientName(state.caseData)) saveDraft({ silent: true });
+      }
+    } else {
+      checkAndSyncRemoteChanges();
+    }
+  });
+  window.addEventListener("beforeunload", () => {
+    if (state.caseData) {
+      try { syncScalarsToCase(); } catch (_) {}
+      persistWorkingSession();
+    }
+  });
 }
 
 function scheduleRecalc(resetForms = false) {
   syncScalarsToCase();
+  markDirtyAndScheduleAutoSave();
   clearTimeout(state.calcTimer);
   state.calcTimer = setTimeout(() => recalculate(resetForms), 180);
 }
@@ -2151,6 +2450,10 @@ window.openSavedCase = async (folderName) => {
 
 function applyServerCaseResponse(res) {
   state.caseData = res.case;
+  state.baseCaseSnapshot = JSON.parse(JSON.stringify(res.case));
+  state.baseRevision = Number(res.case?.revision || 0);
+  state.activeFolder = res.folder_name && res.folder_name !== "Unnamed,Client" ? res.folder_name : "";
+  state.dirty = false;
   state.totals = res.totals || {};
   state.compliance = res.compliance || [];
   state.folderName = res.folder_name || "Unnamed,Client";
@@ -2160,6 +2463,11 @@ function applyServerCaseResponse(res) {
   renderCompliance();
   renderFormsChecklist(res.recommended_forms || []);
   renderMatrixPreview();
+  persistWorkingSession();
+  setAutoSaveBadge(
+    state.baseRevision > 0 ? `Synced (Rev #${state.baseRevision})` : "Auto-Save: Ready",
+    state.baseRevision > 0 ? "pill-ok" : ""
+  );
   // Automatically push newly loaded / imported client straight into the embedded Means Test
   pushCaseToMeansTest({ replaceAll: true, silent: true });
 }
@@ -2316,6 +2624,20 @@ function setupStaticHandlers() {
     $("exempt-catalog-search").addEventListener("input", () => renderExemptionCatalogDirectory());
   }
 
+  // Instant keystroke persistence so refreshing mid-typing NEVER loses data + live CC 180-day warning
+  scalarContainer.addEventListener("input", (ev) => {
+    const id = ev.target.id || "";
+    if (!id || id.startsWith("set-") || id === "import-chapter" || id === "mt-site-url" || id === "mt-import-json" || id === "exempt-catalog-search") return;
+    if (id === "f-cc-date" || id === "f-filing-date") {
+      updateCreditCounselingWarning();
+    }
+    clearTimeout(state.inputPersistTimer);
+    state.inputPersistTimer = setTimeout(() => {
+      syncScalarsToCase();
+      markDirtyAndScheduleAutoSave();
+    }, 250);
+  });
+
   // CIF Dropzone
   const dz = $("cif-dropzone");
   const cifInput = $("cif-file-input");
@@ -2334,6 +2656,7 @@ function setupStaticHandlers() {
 
   // Quick Case Actions
   $("btn-new-case").addEventListener("click", () => {
+    clearWorkingSession();
     state.caseData = createBlankCase($("import-chapter").value);
     renderAllCaseUI();
     recalculate(true);
@@ -2580,6 +2903,10 @@ async function handleCifUpload(file) {
   try {
     const res = await api("/api/import-cif", { method: "POST", body: fd });
     applyServerCaseResponse(res);
+    // Immediately auto-save newly imported CIF to the client folder so a refresh never loses it
+    if (hasSaveableClientName(state.caseData)) {
+      markDirtyAndScheduleAutoSave();
+    }
     toast(`Imported CIF -> Folder: ${state.folderName}`, "ok");
   } catch (err) {
     toast(err.message, "err");
@@ -2596,6 +2923,7 @@ async function handleCreditorUpload(file) {
     if (res.unsecured?.length) state.caseData.unsecured_creditors.push(...res.unsecured);
     renderSecuredCreditors();
     renderUnsecuredCreditors();
+    markDirtyAndScheduleAutoSave();
     await recalculate(false);
     $("cred-import-status").innerHTML = `<div class="alert alert-ok">Imported <strong>${res.count}</strong> creditor(s) from <code>${esc(file.name)}</code>.</div>`;
     toast(`Imported ${res.count} creditor(s)!`, "ok");
@@ -2615,19 +2943,82 @@ async function loadSample(chapter, joint) {
   }
 }
 
-async function saveDraft() {
+async function saveDraft(opts = {}) {
+  const silent = Boolean(opts && typeof opts === "object" && opts.silent);
+  if (state.savingInFlight) {
+    state.pendingResave = true;
+    return;
+  }
   syncScalarsToCase();
+  if (silent && !hasSaveableClientName(state.caseData)) {
+    persistWorkingSession();
+    return;
+  }
+
+  state.savingInFlight = true;
+  clearTimeout(state.autoSaveTimer);
+  setAutoSaveBadge("Auto-Save: Saving...", "pill-gold");
+
   try {
+    const payload = {
+      case: state.caseData,
+      base_case: state.baseCaseSnapshot,
+      base_revision: state.baseRevision,
+      editor_id: state.editorId,
+    };
     const res = await api("/api/cases/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state.caseData),
+      body: JSON.stringify(payload),
     });
+
+    if (res.case) {
+      state.baseCaseSnapshot = JSON.parse(JSON.stringify(res.case));
+      state.baseRevision = Number(res.revision ?? res.case.revision ?? 0);
+      if (res.merged) {
+        // Merge coworker edits cleanly into our UI without interrupting active input focus!
+        state.caseData = res.case;
+        if (res.totals) state.totals = res.totals;
+        if (res.compliance) state.compliance = res.compliance;
+        if (res.matrix_preview) state.matrixPreview = res.matrix_preview;
+        renderAllCaseUIPreservingFocus();
+        updateHeaderAndMetrics();
+        renderCompliance();
+        renderMatrixPreview();
+      } else {
+        state.caseData.revision = state.baseRevision;
+        state.caseData.last_saved_at = res.last_saved_at || "";
+      }
+    } else {
+      state.baseCaseSnapshot = JSON.parse(JSON.stringify(state.caseData));
+      if (res.revision != null) state.baseRevision = Number(res.revision);
+    }
+
+    state.activeFolder = res.folder_name || state.activeFolder;
+    state.folderName = res.folder_name || state.folderName;
+    state.dirty = false;
     state.savedCases = res.saved_cases || state.savedCases;
     renderSavedCases();
-    toast(`Saved draft to Clients/${res.folder_name}`, "ok");
+    persistWorkingSession();
+
+    const tStr = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const revTxt = state.baseRevision ? ` (Rev #${state.baseRevision})` : "";
+    if (res.merged) {
+      setAutoSaveBadge(`Merged Coworker Edits ${tStr}${revTxt}`, "pill-ok");
+      toast(`Auto-saved & merged concurrent coworker edits on ${res.folder_name}${revTxt}`, "ok");
+    } else {
+      setAutoSaveBadge(`Auto-Saved ${tStr}${revTxt}`, "pill-ok");
+      if (!silent) toast(`Saved draft to Clients/${res.folder_name}${revTxt}`, "ok");
+    }
   } catch (err) {
-    toast(err.message, "err");
+    setAutoSaveBadge("Auto-Save: Retry Pending", "pill-warn");
+    if (!silent) toast(err.message, "err");
+  } finally {
+    state.savingInFlight = false;
+    if (state.pendingResave) {
+      state.pendingResave = false;
+      scheduleAutoSave(500);
+    }
   }
 }
 
@@ -3152,6 +3543,7 @@ function applyMeansTestSnapshotToPetition(mtCase, calc, opts = {}) {
     `Line 45 Monthly Disposable Income: ${money(mt.monthly_disposable_income)}/mo (${calc.commitmentPeriodMonths}-mo commitment)`;
 
   populateScalarsFromCase();
+  markDirtyAndScheduleAutoSave();
 
   const ts = new Date().toLocaleTimeString();
   const statusEl = $("mt-sync-status");

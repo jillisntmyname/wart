@@ -187,13 +187,144 @@ function blankIncome() {
 
 const $ = (id) => document.getElementById(id);
 const num = (v) => {
-  const n = parseFloat(v);
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const cleaned = String(v ?? "").replace(/[$,\s]/g, "");
+  const n = parseFloat(cleaned);
   return Number.isFinite(n) ? n : 0;
 };
 const money = (v) =>
   "$" + Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ==================== AUTO-FORMATTING (DATES, CURRENCY, SSN) ==================== */
+function formatDateInput(raw, liveTyping = false) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+
+  if (liveTyping) {
+    // Only auto-insert slashes if the user is entering digits/slashes (e.g., 11192026 -> 11/19/2026)
+    const digits = s.replace(/\D/g, "").slice(0, 8);
+    if (!digits) return s;
+    // Allow partial month/year typing if user already typed a slash cleanly
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  }
+
+  // Finalize on blur / change / load
+  // 1. ISO YYYY-MM-DD -> MM/DD/YYYY
+  const iso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (iso) {
+    return `${iso[2].padStart(2, "0")}/${iso[3].padStart(2, "0")}/${iso[1]}`;
+  }
+  // 2. M/D/YYYY or M-D-YY -> MM/DD/YYYY
+  const slash = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/);
+  if (slash) {
+    const mm = slash[1].padStart(2, "0");
+    const dd = slash[2].padStart(2, "0");
+    let yy = slash[3];
+    if (yy.length === 2) {
+      const n = parseInt(yy, 10);
+      const cur2 = new Date().getFullYear() % 100;
+      yy = String((n > cur2 + 5 ? 1900 : 2000) + n);
+    }
+    return `${mm}/${dd}/${yy}`;
+  }
+  // 2b. Explicit MM/YYYY (e.g., 11/2024 for creditor Date Incurred) -> preserve as MM/YYYY
+  const my = s.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (my) {
+    return `${my[1].padStart(2, "0")}/${my[2]}`;
+  }
+  // 3. Pure 8 digits MMDDYYYY (e.g., 11192026 -> 11/19/2026)
+  const digits = s.replace(/\D/g, "");
+  if (digits.length === 8) {
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  }
+  // 4. Pure 6 digits MMDDYY (e.g., 111926 -> 11/19/2026, 051278 -> 05/12/1978)
+  if (digits.length === 6) {
+    const n = parseInt(digits.slice(4, 6), 10);
+    const cur2 = new Date().getFullYear() % 100;
+    const yyyy = String((n > cur2 + 5 ? 1900 : 2000) + n);
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${yyyy}`;
+  }
+  // 5. Preserve MM/YYYY or YYYY for partial creditor dates
+  return s;
+}
+
+function formatSsnInput(raw) {
+  const digits = String(raw || "").replace(/\D/g, "").slice(0, 9);
+  if (!digits) return "";
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function formatCurrencyDisplay(raw) {
+  const n = num(raw);
+  const abs = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `-$${abs}` : `$${abs}`;
+}
+
+function formatSingleField(el, liveTyping = false) {
+  if (!el || !el.dataset || !el.dataset.format) return;
+  const fmt = el.dataset.format;
+  if (fmt === "date") {
+    const next = formatDateInput(el.value, liveTyping);
+    if (next !== el.value) el.value = next;
+  } else if (fmt === "ssn") {
+    const next = formatSsnInput(el.value);
+    if (next !== el.value) el.value = next;
+  } else if (fmt === "currency" && !liveTyping) {
+    el.value = formatCurrencyDisplay(el.value);
+  }
+}
+
+function formatAllFieldsInDOM(root = document) {
+  root.querySelectorAll("input[data-format]").forEach((el) => {
+    if (document.activeElement === el) return;
+    formatSingleField(el, false);
+  });
+}
+
+function setupAutoFormatters() {
+  // Live typing for dates (11192026 -> 11/19/2026) and SSNs (123456789 -> 123-45-6789)
+  document.addEventListener("input", (ev) => {
+    const el = ev.target;
+    if (!el || !el.dataset || !el.dataset.format) return;
+    const fmt = el.dataset.format;
+    if (ev.inputType && ev.inputType.startsWith("delete")) return; // Never fight Backspace/Delete
+    if (fmt === "date") {
+      // Only auto-slash when user is typing digits (don't disturb partial text like "2024" until >2 digits or paste)
+      const digits = el.value.replace(/\D/g, "");
+      if (digits.length === 8 || (digits.length >= 3 && !/[a-zA-Z]/.test(el.value))) {
+        formatSingleField(el, true);
+      }
+    } else if (fmt === "ssn") {
+      formatSingleField(el, true);
+    }
+  });
+
+  // Focus on currency: strip $ and commas for effortless numeric entry (clear 0.00 so typing starts clean)
+  document.addEventListener("focus", (ev) => {
+    const el = ev.target;
+    if (!el || !el.dataset || el.dataset.format !== "currency") return;
+    const n = num(el.value);
+    el.value = n === 0 ? "" : String(n);
+    setTimeout(() => { try { el.select(); } catch (_) {} }, 0);
+  }, true);
+
+  // Capture-phase change & blur so formatted values are committed BEFORE inline onchange handlers read el.value
+  document.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (el && el.dataset && el.dataset.format) formatSingleField(el, false);
+  }, true);
+
+  document.addEventListener("blur", (ev) => {
+    const el = ev.target;
+    if (el && el.dataset && el.dataset.format) formatSingleField(el, false);
+  }, true);
+}
 
 function toast(msg, kind = "") {
   const el = $("toast");
@@ -556,6 +687,7 @@ async function api(url, opts = {}) {
 /* ==================== BOOTSTRAP ==================== */
 async function init() {
   state.caseData = createBlankCase("7");
+  setupAutoFormatters();
   setupTabs();
   setupStaticHandlers();
   renderAllCaseUI();
@@ -770,6 +902,7 @@ function populateScalarsFromCase() {
   $("mt-exempt").checked = !!mt.exempt_from_means_test;
   $("mt-notes").value = mt.external_notes || "";
   $("mt-site-url").value = state.settings?.means_test_url || "";
+  formatAllFieldsInDOM();
 }
 
 function syncScalarsToCase() {
@@ -1116,7 +1249,7 @@ function renderPriorBankruptcies() {
     ? arr.map((p, i) => `
       <div class="grid-4" style="align-items:end;">
         <div class="field"><label>District</label><input type="text" value="${esc(p.district)}" onchange="updateArr('prior_bankruptcies',${i},'district',this.value)"/></div>
-        <div class="field"><label>Date Filed</label><input type="text" value="${esc(p.date_filed)}" onchange="updateArr('prior_bankruptcies',${i},'date_filed',this.value)"/></div>
+        <div class="field"><label>Date Filed</label><input type="text" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" value="${esc(formatDateInput(p.date_filed, false))}" onchange="updateArr('prior_bankruptcies',${i},'date_filed',this.value)"/></div>
         <div class="field"><label>Case Number</label><input type="text" value="${esc(p.case_number)}" onchange="updateArr('prior_bankruptcies',${i},'case_number',this.value)"/></div>
         <div class="field"><button class="btn btn-danger btn-sm" onclick="removeArr('prior_bankruptcies',${i})">Remove</button></div>
       </div>`).join("")
@@ -1218,7 +1351,7 @@ function renderRealEstate() {
               <span>Market Value ($)</span>
               <a href="${esc(paInfo.url)}" target="_blank" rel="noopener" onclick="lookupPropertyAppraiser(${i});return false;" style="font-size:11px; color:var(--navy); text-decoration:underline;">PCPAO / PA &nearr;</a>
             </label>
-            <input type="number" step="0.01" value="${r.market_value || 0}" onchange="updateArrNum('real_estate',${i},'market_value',this.value);updateArrNum('real_estate',${i},'portion_owned_value',this.value)"/>
+            <input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(r.market_value))}" onchange="updateArrNum('real_estate',${i},'market_value',this.value);updateArrNum('real_estate',${i},'portion_owned_value',this.value)"/>
           </div>
           <div class="field"><label>Value Source</label><input type="text" value="${esc(r.value_source)}" onchange="updateArr('real_estate',${i},'value_source',this.value)"/></div>
           <div class="field"><label>Intent</label>
@@ -1260,9 +1393,9 @@ function renderVehicles() {
               <span>Market Value ($)</span>
               <a href="${esc(kbbUrl)}" target="_blank" rel="noopener" style="font-size:11px; color:var(--navy); text-decoration:underline;">KBB.com &nearr;</a>
             </label>
-            <input type="number" step="0.01" value="${v.market_value || 0}" onchange="updateArrNum('vehicles',${i},'market_value',this.value);updateArrNum('vehicles',${i},'portion_owned_value',this.value)"/>
+            <input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(v.market_value))}" onchange="updateArrNum('vehicles',${i},'market_value',this.value);updateArrNum('vehicles',${i},'portion_owned_value',this.value)"/>
           </div>
-          <div class="field"><label>Loan Payoff ($)</label><input type="number" step="0.01" value="${v.payoff || 0}" onchange="updateArrNum('vehicles',${i},'payoff',this.value)"/></div>
+          <div class="field"><label>Loan Payoff ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(v.payoff))}" onchange="updateArrNum('vehicles',${i},'payoff',this.value)"/></div>
           <div class="field"><label>Intent (Ch. 7 / 13)</label>
             <select onchange="updateArr('vehicles',${i},'intent',this.value)">
               ${["Keep", "Reaffirm", "Redeem", "Surrender"].map((o) => `<option value="${o}" ${v.intent === o ? "selected" : ""}>${o}</option>`).join("")}
@@ -1286,7 +1419,7 @@ function renderBankAccounts() {
           </select>
         </div>
         <div class="field"><label>Bank / Credit Union</label><input type="text" value="${esc(b.institution)}" onchange="updateSubArr('bank_accounts',${i},'institution',this.value)"/></div>
-        <div class="field"><label>Balance ($)</label><input type="number" step="0.01" value="${b.balance || 0}" onchange="updateSubArrNum('bank_accounts',${i},'balance',this.value)"/></div>
+        <div class="field"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(b.balance))}" onchange="updateSubArrNum('bank_accounts',${i},'balance',this.value)"/></div>
         <div class="field"><button class="btn btn-danger btn-sm" onclick="removeSubArr('bank_accounts',${i})">Remove</button></div>
       </div>`).join("")
     : '<div class="muted">No bank accounts listed.</div>';
@@ -1303,7 +1436,7 @@ function renderRetirementAccounts() {
           </select>
         </div>
         <div class="field"><label>Institution</label><input type="text" value="${esc(r.institution)}" onchange="updateSubArr('retirement_accounts',${i},'institution',this.value)"/></div>
-        <div class="field"><label>Balance ($)</label><input type="number" step="0.01" value="${r.balance || 0}" onchange="updateSubArrNum('retirement_accounts',${i},'balance',this.value)"/></div>
+        <div class="field"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(r.balance))}" onchange="updateSubArrNum('retirement_accounts',${i},'balance',this.value)"/></div>
         <div class="field"><button class="btn btn-danger btn-sm" onclick="removeSubArr('retirement_accounts',${i})">Remove</button></div>
       </div>`).join("")
     : '<div class="muted">No retirement accounts listed.</div>';
@@ -1477,7 +1610,8 @@ window.addExemptionFromCatalog = (exId) => {
 };
 
 window.applyExemptionChoice = (idx, exemptionId) => {
-  const ex = state.caseData.exemptions[idx];
+  const arr = state.caseData.exemptions || [];
+  const ex = arr[idx];
   if (!ex) return;
   if (!exemptionId || exemptionId === "__custom__") {
     ex.exemption_id = "";
@@ -1493,16 +1627,30 @@ window.applyExemptionChoice = (idx, exemptionId) => {
   ex.statute = it.statute;
   const isJoint = !!state.caseData?.is_joint;
   const cap = isJoint ? (it.limit_joint ?? it.limit_single) : it.limit_single;
+
+  // Stack-aware: subtract any exemptions already claimed on sibling rows for this same asset
+  const key = _exemptionAssetKey(ex);
+  let otherExempted = 0;
+  if (key) {
+    arr.forEach((row, rIdx) => {
+      if (rIdx !== idx && _exemptionAssetKey(row) === key) {
+        otherExempted += row.claim_100_percent ? Number(row.current_value || 0) : Number(row.exemption_amount || 0);
+      }
+    });
+  }
+  const val = Number(ex.current_value || 0);
+  const remaining = Math.max(0, round2(val - otherExempted));
+
   if (it.unlimited) {
-    ex.claim_100_percent = true;
-    if (Number(ex.current_value || 0) > 0) ex.exemption_amount = Number(ex.current_value);
+    ex.claim_100_percent = otherExempted === 0;
+    if (remaining > 0) ex.exemption_amount = remaining;
+    else if (val > 0 && otherExempted === 0) ex.exemption_amount = val;
   } else {
     ex.claim_100_percent = false;
-    const val = Number(ex.current_value || 0);
-    if (val > 0 && cap !== null && cap !== undefined) {
-      ex.exemption_amount = Math.min(val, cap);
-    } else if (val > 0) {
-      ex.exemption_amount = val;
+    if (remaining > 0 && cap !== null && cap !== undefined) {
+      ex.exemption_amount = Math.min(remaining, cap);
+    } else if (remaining > 0) {
+      ex.exemption_amount = remaining;
     }
   }
   renderExemptions();
@@ -1586,6 +1734,88 @@ function syncAllAssetsToExemptions() {
   toast(added ? `Synced ${added} asset(s) to Schedule C — pick an exemption from each row's dropdown.` : "All scheduled assets are already listed on Schedule C.", added ? "ok" : "");
 }
 
+function _exemptionAssetKey(ex) {
+  const ln = String(ex.schedule_ab_line || "").trim().toLowerCase();
+  if (ln) return `line:${ln}`;
+  const desc = String(ex.description || "").trim().toLowerCase();
+  return desc ? `desc:${desc}` : "";
+}
+
+window.stackExemptionRow = (idx) => {
+  const arr = state.caseData.exemptions || [];
+  const base = arr[idx];
+  if (!base) return;
+  const key = _exemptionAssetKey(base);
+
+  // Find all existing stacked rows for this same asset so we insert right after them and compute remaining balance
+  let lastSiblingIdx = idx;
+  let totalExempted = 0;
+  const usedIds = new Set();
+  arr.forEach((row, rIdx) => {
+    if (key ? _exemptionAssetKey(row) === key : rIdx === idx) {
+      lastSiblingIdx = rIdx;
+      totalExempted += row.claim_100_percent ? Number(row.current_value || 0) : Number(row.exemption_amount || 0);
+      if (row.exemption_id) usedIds.add(row.exemption_id);
+    }
+  });
+
+  const assetVal = Number(base.current_value || 0);
+  const remaining = Math.max(0, round2(assetVal - totalExempted));
+
+  // Suggest a sensible second exemption statute in the active scheme
+  const scheme = getActiveSchemeCode();
+  const catalog = getActiveSchemeExemptions();
+  let suggested = null;
+  const prefOrder = scheme === "FEDERAL"
+    ? ["fed_wildcard", "fed_household", "fed_jewelry", "fed_vehicle"]
+    : scheme === "FL"
+      ? ["fl_wildcard", "fl_personal", "fl_vehicle", "fl_tbe", "fl_wages_hoh"]
+      : catalog.map((c) => c.id);
+  for (const cid of prefOrder) {
+    if (!usedIds.has(cid)) {
+      suggested = catalog.find((c) => c.id === cid) || null;
+      if (suggested) break;
+    }
+  }
+
+  const newRow = {
+    schedule_ab_line: base.schedule_ab_line || "",
+    description: base.description || "",
+    current_value: assetVal,
+    exemption_amount: remaining,
+    claim_100_percent: false,
+    statute: suggested ? suggested.statute : "",
+    exemption_id: suggested ? suggested.id : "",
+    override_amount: false,
+  };
+  arr.splice(lastSiblingIdx + 1, 0, newRow);
+  renderExemptions();
+  scheduleRecalc(false);
+  toast(
+    remaining > 0
+      ? `Stacked additional exemption on "${base.description || base.schedule_ab_line || "asset"}" (${money(remaining)} remaining)`
+      : `Stacked additional exemption row on "${base.description || base.schedule_ab_line || "asset"}"`,
+    "ok"
+  );
+};
+
+window.updateExemptionAssetVal = (idx, rawVal) => {
+  const arr = state.caseData.exemptions || [];
+  const ex = arr[idx];
+  if (!ex) return;
+  const newVal = num(rawVal);
+  const key = _exemptionAssetKey(ex);
+  ex.current_value = newVal;
+  // Keep sibling stacked rows for the same asset showing the same Current Value
+  if (key) {
+    arr.forEach((row) => {
+      if (_exemptionAssetKey(row) === key) row.current_value = newVal;
+    });
+  }
+  renderExemptions();
+  scheduleRecalc(false);
+};
+
 function renderExemptions() {
   renderExemptionCapMeters();
   renderExemptionCatalogDirectory();
@@ -1593,8 +1823,28 @@ function renderExemptions() {
   const catalog = getActiveSchemeExemptions();
   const isJoint = !!state.caseData?.is_joint;
 
+  // Group rows by asset to compute per-asset stacked totals & show clear visual grouping
+  const groups = new Map();
+  arr.forEach((ex, i) => {
+    const key = _exemptionAssetKey(ex) || `__row_${i}`;
+    if (!groups.has(key)) {
+      groups.set(key, { indices: [], totalExempt: 0, any100: false, value: Number(ex.current_value || 0) });
+    }
+    const g = groups.get(key);
+    g.indices.push(i);
+    if (ex.claim_100_percent) g.any100 = true;
+    g.totalExempt += ex.claim_100_percent ? Number(ex.current_value || 0) : Number(ex.exemption_amount || 0);
+    if (Number(ex.current_value || 0) > g.value) g.value = Number(ex.current_value || 0);
+  });
+
   $("exemptions-tbody").innerHTML = arr.length
     ? arr.map((ex, i) => {
+      const key = _exemptionAssetKey(ex) || `__row_${i}`;
+      const g = groups.get(key);
+      const posInGroup = g.indices.indexOf(i);
+      const isStackedChild = posInGroup > 0;
+      const stackCount = g.indices.length;
+
       const matched = findExemptionCatalogEntry(ex);
       const selectedId = matched ? matched.id : "__custom__";
       const opts = [
@@ -1607,25 +1857,54 @@ function renderExemptions() {
       const blurbHtml = matched
         ? `<div style="font-size:11px; color:#475569; margin-top:4px; line-height:1.35; background:#f8fafc; border-left:3px solid var(--gold); padding:4px 7px; border-radius:4px;">${esc(matched.blurb)}</div>`
         : `<div style="font-size:11px; color:#64748b; margin-top:4px;">Manual / custom statute override — enter any statute &amp; amount freely.</div>`;
+
+      // Per-asset coverage summary badge on the first row of each asset group
+      let coverageHtml = "";
+      if (!isStackedChild && g.value > 0) {
+        const covered = g.any100 ? g.value : round2(g.totalExempt);
+        const diff = round2(g.value - covered);
+        const prefix = stackCount > 1 ? `${stackCount} stacked exemptions: ` : "";
+        if (diff > 0.005) {
+          coverageHtml = `<div style="font-size:11px; margin-top:4px; color:#b45309; font-weight:600;">${prefix}${money(covered)} / ${money(g.value)} (${money(diff)} unexempted)</div>`;
+        } else if (diff < -0.005 && !g.any100) {
+          coverageHtml = `<div style="font-size:11px; margin-top:4px; color:#dc2626; font-weight:600;">${prefix}${money(covered)} / ${money(g.value)} (Over by ${money(Math.abs(diff))})</div>`;
+        } else {
+          coverageHtml = `<div style="font-size:11px; margin-top:4px; color:#15803d; font-weight:600;">${prefix}100% Covered (${money(covered)})</div>`;
+        }
+      } else if (isStackedChild) {
+        coverageHtml = `<div style="font-size:11px; margin-top:4px; color:var(--navy); font-weight:600;">&#8627; Stacked Exemption #${posInGroup + 1} on same asset</div>`;
+      }
+
+      const rowStyle = isStackedChild ? ' style="background:#f8fafc;"' : "";
+      const firstCellStyle = isStackedChild
+        ? 'vertical-align:top; border-left:3px solid var(--navy); padding-left:8px;'
+        : 'vertical-align:top;';
+
       return `
-      <tr>
-        <td style="vertical-align:top;"><input type="text" value="${esc(ex.schedule_ab_line)}" onchange="updateArr('exemptions',${i},'schedule_ab_line',this.value)"/></td>
-        <td style="vertical-align:top;"><input type="text" value="${esc(ex.description)}" onchange="updateArr('exemptions',${i},'description',this.value)"/></td>
-        <td style="vertical-align:top;"><input type="number" step="0.01" value="${ex.current_value || 0}" onchange="updateArrNum('exemptions',${i},'current_value',this.value);renderExemptionCapMeters();"/></td>
+      <tr${rowStyle}>
+        <td style="${firstCellStyle}"><input type="text" value="${esc(ex.schedule_ab_line)}" onchange="updateArr('exemptions',${i},'schedule_ab_line',this.value);renderExemptions();"/></td>
+        <td style="vertical-align:top;">
+          <input type="text" value="${esc(ex.description)}" onchange="updateArr('exemptions',${i},'description',this.value)"/>
+          ${coverageHtml}
+        </td>
+        <td style="vertical-align:top;"><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(ex.current_value))}" onchange="updateExemptionAssetVal(${i}, this.value)"/></td>
         <td style="vertical-align:top;">
           <select style="width:100%;" onchange="applyExemptionChoice(${i}, this.value)">${opts}</select>
           ${blurbHtml}
         </td>
         <td style="vertical-align:top;">
-          <input type="number" step="0.01" value="${ex.exemption_amount || 0}" onchange="updateExemptionAmt(${i}, this.value)"/>
+          <input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(ex.exemption_amount))}" onchange="updateExemptionAmt(${i}, this.value);renderExemptions();"/>
         </td>
         <td style="text-align:center; vertical-align:top; padding-top:10px;">
-          <input type="checkbox" ${ex.claim_100_percent ? "checked" : ""} onchange="updateArr('exemptions',${i},'claim_100_percent',this.checked)"/>
+          <input type="checkbox" ${ex.claim_100_percent ? "checked" : ""} onchange="updateArr('exemptions',${i},'claim_100_percent',this.checked);renderExemptions();"/>
         </td>
         <td style="vertical-align:top;">
           <input type="text" value="${esc(ex.statute)}" onchange="updateArr('exemptions',${i},'statute',this.value);renderExemptionCapMeters();"/>
         </td>
-        <td style="vertical-align:top;"><button type="button" class="btn btn-danger btn-sm" onclick="removeArr('exemptions',${i})">&times;</button></td>
+        <td style="vertical-align:top; white-space:nowrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="stackExemptionRow(${i})" title="Add another stacked exemption statute to this same asset">+ Stack</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="removeArr('exemptions',${i})" title="Remove this exemption row">&times;</button>
+        </td>
       </tr>`;
     }).join("")
     : '<tr><td colspan="8" class="muted">Click <strong>"Auto-Apply Exemptions"</strong> or <strong>"Sync All Assets &rarr; Schedule C"</strong> to assign exemptions per asset.</td></tr>';
@@ -1648,10 +1927,10 @@ function renderSecuredCreditors() {
           <div class="field"><label>State</label><input type="text" value="${esc(sc.state)}" onchange="updateArr('secured_creditors',${i},'state',this.value.toUpperCase())"/></div>
           <div class="field"><label>ZIP</label><input type="text" value="${esc(sc.zip_code)}" onchange="updateArr('secured_creditors',${i},'zip_code',this.value)"/></div>
           <div class="field"><label>Acct Last 4</label><input type="text" maxlength="4" value="${esc(sc.account_last4)}" onchange="updateArr('secured_creditors',${i},'account_last4',this.value)"/></div>
-          <div class="field"><label>Date Incurred</label><input type="text" value="${esc(sc.date_incurred)}" onchange="updateArr('secured_creditors',${i},'date_incurred',this.value)"/></div>
+          <div class="field"><label>Date Incurred</label><input type="text" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" value="${esc(formatDateInput(sc.date_incurred, false))}" onchange="updateArr('secured_creditors',${i},'date_incurred',this.value)"/></div>
           <div class="field"><label>Collateral Description</label><input type="text" value="${esc(sc.collateral_desc)}" onchange="updateArr('secured_creditors',${i},'collateral_desc',this.value)"/></div>
-          <div class="field"><label>Claim Amount ($)</label><input type="number" step="0.01" value="${sc.claim_amount || 0}" onchange="updateArrNum('secured_creditors',${i},'claim_amount',this.value)"/></div>
-          <div class="field"><label>Collateral Value ($)</label><input type="number" step="0.01" value="${sc.collateral_value || 0}" onchange="updateArrNum('secured_creditors',${i},'collateral_value',this.value)"/></div>
+          <div class="field"><label>Claim Amount ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(sc.claim_amount))}" onchange="updateArrNum('secured_creditors',${i},'claim_amount',this.value)"/></div>
+          <div class="field"><label>Collateral Value ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(sc.collateral_value))}" onchange="updateArrNum('secured_creditors',${i},'collateral_value',this.value)"/></div>
           <div class="field"><label>Intent (Form 108)</label>
             <select onchange="updateArr('secured_creditors',${i},'intent',this.value)">
               ${["Keep", "Reaffirm", "Redeem", "Surrender"].map((o) => `<option value="${o}" ${sc.intent === o ? "selected" : ""}>${o}</option>`).join("")}
@@ -1681,7 +1960,7 @@ function renderUnsecuredCreditors() {
           <div class="field"><label>State</label><input type="text" value="${esc(uc.state)}" onchange="updateArr('unsecured_creditors',${i},'state',this.value.toUpperCase())"/></div>
           <div class="field"><label>ZIP</label><input type="text" value="${esc(uc.zip_code)}" onchange="updateArr('unsecured_creditors',${i},'zip_code',this.value)"/></div>
           <div class="field"><label>Acct Last 4</label><input type="text" maxlength="4" value="${esc(uc.account_last4)}" onchange="updateArr('unsecured_creditors',${i},'account_last4',this.value)"/></div>
-          <div class="field"><label>Total Claim ($)</label><input type="number" step="0.01" value="${uc.total_claim || 0}" onchange="updateArrNum('unsecured_creditors',${i},'total_claim',this.value)"/></div>
+          <div class="field"><label>Total Claim ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(uc.total_claim))}" onchange="updateArrNum('unsecured_creditors',${i},'total_claim',this.value)"/></div>
           <div class="field"><label>Schedule Class</label>
             <select onchange="updateArr('unsecured_creditors',${i},'priority',this.value==='true');renderUnsecuredCreditors();">
               <option value="false" ${!uc.priority ? "selected" : ""}>Nonpriority (Schedule F)</option>
@@ -1694,7 +1973,7 @@ function renderUnsecuredCreditors() {
             </select>
           </div>
           <div class="field"><label>Specify (e.g. CreditCard / Medical)</label><input type="text" value="${esc(uc.claim_type_specify)}" onchange="updateArr('unsecured_creditors',${i},'claim_type_specify',this.value)"/></div>
-          <div class="field"><label>Date Incurred</label><input type="text" value="${esc(uc.date_incurred)}" onchange="updateArr('unsecured_creditors',${i},'date_incurred',this.value)"/></div>
+          <div class="field"><label>Date Incurred</label><input type="text" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" value="${esc(formatDateInput(uc.date_incurred, false))}" onchange="updateArr('unsecured_creditors',${i},'date_incurred',this.value)"/></div>
         </div>
       </div>`).join("")
     : '<div class="muted">No unsecured creditors yet. Add manually or import a CSV / Credit Report PDF above.</div>';
@@ -1979,6 +2258,7 @@ function populateSettingsUI() {
   $("set-b7-rec").value = s.b2030_defaults?.ch7?.received_prior ?? 2000;
   $("set-b13-agreed").value = s.b2030_defaults?.ch13?.agreed_fee ?? 5358;
   $("set-b13-rec").value = s.b2030_defaults?.ch13?.received_prior ?? 1858;
+  formatAllFieldsInDOM($("tab-settings") || document);
 }
 
 /* ==================== EVENT HANDLERS ==================== */

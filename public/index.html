@@ -96,7 +96,7 @@
           </div>
           <div class="field">
             <label for="f-filing-date">Filing / Signature Date</label>
-            <input type="text" id="f-filing-date" placeholder="MM/DD/YYYY" />
+            <input type="text" id="f-filing-date" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" />
           </div>
           <div class="field">
             <label for="f-case-number">Case Number (if known / amended)</label>
@@ -120,11 +120,11 @@
           </div>
           <div class="field">
             <label for="f-cc-date">Credit Counseling Date</label>
-            <input type="text" id="f-cc-date" placeholder="MM/DD/YYYY" />
+            <input type="text" id="f-cc-date" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" />
           </div>
           <div class="field">
             <label for="f-cc-fee">Credit Counseling Fee ($)</label>
-            <input type="number" step="0.01" id="f-cc-fee" />
+            <input type="text" inputmode="decimal" data-format="currency" id="f-cc-fee" />
           </div>
         </div>
         <div class="btn-group" style="margin-top: 8px; gap: 18px;">
@@ -151,8 +151,8 @@
           </div>
           <div class="grid-3">
             <div class="field"><label>Suffix</label><input type="text" id="d1-suffix" placeholder="Jr., III" /></div>
-            <div class="field"><label>Date of Birth</label><input type="text" id="d1-dob" placeholder="MM/DD/YYYY" /></div>
-            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d1-ssn" placeholder="XXX-XX-XXXX" /></div>
+            <div class="field"><label>Date of Birth</label><input type="text" id="d1-dob" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" /></div>
+            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d1-ssn" data-format="ssn" maxlength="11" placeholder="XXX-XX-XXXX" /></div>
           </div>
           <div class="field"><label>Street Address</label><input type="text" id="d1-street" /></div>
           <div class="grid-4">
@@ -180,8 +180,8 @@
           </div>
           <div class="grid-3">
             <div class="field"><label>Suffix</label><input type="text" id="d2-suffix" /></div>
-            <div class="field"><label>Date of Birth</label><input type="text" id="d2-dob" placeholder="MM/DD/YYYY" /></div>
-            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d2-ssn" placeholder="XXX-XX-XXXX" /></div>
+            <div class="field"><label>Date of Birth</label><input type="text" id="d2-dob" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" /></div>
+            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d2-ssn" data-format="ssn" maxlength="11" placeholder="XXX-XX-XXXX" /></div>
           </div>
           <div class="field"><label>Street Address (if different)</label><input type="text" id="d2-street" /></div>
           <div class="grid-4">
@@ -262,58 +262,58 @@
           <div>
             <div class="grid-2">
               <div class="field"><label>Household Goods Description (Line 6)</label><input type="text" id="pa-hh-desc" placeholder="Sofa, beds, tables, appliances..." /></div>
-              <div class="field"><label>Household Goods Value ($)</label><input type="number" step="0.01" id="pa-hh-val" /></div>
+              <div class="field"><label>Household Goods Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-hh-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Electronics Description (Line 7)</label><input type="text" id="pa-el-desc" placeholder="TVs, laptop, cell phones..." /></div>
-              <div class="field"><label>Electronics Value ($)</label><input type="number" step="0.01" id="pa-el-val" /></div>
+              <div class="field"><label>Electronics Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-el-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Collectibles Description (Line 8)</label><input type="text" id="pa-col-desc" placeholder="Art, coins, stamps, antiques..." /></div>
-              <div class="field"><label>Collectibles Value ($)</label><input type="number" step="0.01" id="pa-col-val" /></div>
+              <div class="field"><label>Collectibles Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-col-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Sports &amp; Hobby Equipment (Line 9)</label><input type="text" id="pa-spt-desc" placeholder="Bicycles, golf clubs, gym gear..." /></div>
-              <div class="field"><label>Sports &amp; Hobby Value ($)</label><input type="number" step="0.01" id="pa-spt-val" /></div>
+              <div class="field"><label>Sports &amp; Hobby Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-spt-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Firearms Description (Line 10)</label><input type="text" id="pa-arm-desc" placeholder="Handguns, rifles, shotguns..." /></div>
-              <div class="field"><label>Firearms Value ($)</label><input type="number" step="0.01" id="pa-arm-val" /></div>
+              <div class="field"><label>Firearms Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-arm-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Clothing Description (Line 11)</label><input type="text" id="pa-cl-desc" /></div>
-              <div class="field"><label>Clothing Value ($)</label><input type="number" step="0.01" id="pa-cl-val" /></div>
+              <div class="field"><label>Clothing Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-cl-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Jewelry Description (Line 12)</label><input type="text" id="pa-jw-desc" placeholder="Wedding rings, watches..." /></div>
-              <div class="field"><label>Jewelry Value ($)</label><input type="number" step="0.01" id="pa-jw-val" /></div>
+              <div class="field"><label>Jewelry Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-jw-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Pets / Non-Farm Animals (Line 13)</label><input type="text" id="pa-pet-desc" placeholder="Family dog, cat..." /></div>
-              <div class="field"><label>Pets / Animals Value ($)</label><input type="number" step="0.01" id="pa-pet-val" /></div>
+              <div class="field"><label>Pets / Animals Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-pet-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Other Household Items (Line 14)</label><input type="text" id="pa-othhh-desc" placeholder="Lawnmower, patio items..." /></div>
-              <div class="field"><label>Other Household Value ($)</label><input type="number" step="0.01" id="pa-othhh-val" /></div>
+              <div class="field"><label>Other Household Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-othhh-val" /></div>
             </div>
           </div>
           <div>
-            <div class="field"><label>Cash on Hand (Line 16) ($)</label><input type="number" step="0.01" id="pa-cash" /></div>
+            <div class="field"><label>Cash on Hand (Line 16) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-cash" /></div>
             <div class="grid-2">
               <div class="field"><label>Rent Security Deposit Landlord (Line 22)</label><input type="text" id="pa-sec-ll" /></div>
-              <div class="field"><label>Rent Security Deposit ($)</label><input type="number" step="0.01" id="pa-sec-val" /></div>
+              <div class="field"><label>Rent Security Deposit ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-sec-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Tax Refund Description (Line 28)</label><input type="text" id="pa-tax-desc" /></div>
-              <div class="field"><label>Tax Refund Value ($)</label><input type="number" step="0.01" id="pa-tax-val" /></div>
+              <div class="field"><label>Tax Refund Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-tax-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Life Insurance Company (Line 31)</label><input type="text" id="pa-life-co" /></div>
-              <div class="field"><label>Life Insurance Cash Value ($)</label><input type="number" step="0.01" id="pa-life-val" /></div>
+              <div class="field"><label>Life Insurance Cash Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-life-val" /></div>
             </div>
             <div class="grid-2">
               <div class="field"><label>Stocks / Bonds / Business / Other Desc.</label><input type="text" id="pa-oth-desc" /></div>
-              <div class="field"><label>Other Financial / Property Value ($)</label><input type="number" step="0.01" id="pa-oth-val" /></div>
+              <div class="field"><label>Other Financial / Property Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-oth-val" /></div>
             </div>
           </div>
         </div>
@@ -383,7 +383,7 @@
                 <th style="width: 115px;">Exempt Amt ($)</th>
                 <th style="width: 65px;">100%?</th>
                 <th style="min-width: 180px;">Statute (Editable Override)</th>
-                <th style="width: 48px;"></th>
+                <th style="width: 118px;">Stack / Del</th>
               </tr>
             </thead>
             <tbody id="exemptions-tbody"></tbody>
@@ -479,16 +479,16 @@
             <div class="field"><label>Employer Name</label><input type="text" id="i1-emp" /></div>
             <div class="field"><label>How Long Employed</label><input type="text" id="i1-long" /></div>
             <div class="field"><label>Pay Frequency</label><input type="text" id="i1-freq" placeholder="Biweekly / Monthly" /></div>
-            <div class="field"><label>Monthly Gross Wages ($)</label><input type="number" step="0.01" id="i1-gross" /></div>
-            <div class="field"><label>Monthly Overtime ($)</label><input type="number" step="0.01" id="i1-ot" /></div>
-            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="number" step="0.01" id="i1-tax" /></div>
-            <div class="field"><label>Insurance Deduction ($)</label><input type="number" step="0.01" id="i1-ins" /></div>
-            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="number" step="0.01" id="i1-ret" /></div>
-            <div class="field"><label>Other Deductions (Union/DSO/Etc.) ($)</label><input type="number" step="0.01" id="i1-othded" /></div>
-            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="number" step="0.01" id="i1-ss" /></div>
-            <div class="field"><label>Pension / Retirement Income ($)</label><input type="number" step="0.01" id="i1-pen" /></div>
-            <div class="field"><label>Net Business / Rental Income ($)</label><input type="number" step="0.01" id="i1-biz" /></div>
-            <div class="field"><label>Other Monthly Income ($)</label><input type="number" step="0.01" id="i1-other" /></div>
+            <div class="field"><label>Monthly Gross Wages ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-gross" /></div>
+            <div class="field"><label>Monthly Overtime ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ot" /></div>
+            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-tax" /></div>
+            <div class="field"><label>Insurance Deduction ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ins" /></div>
+            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ret" /></div>
+            <div class="field"><label>Other Deductions (Union/DSO/Etc.) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-othded" /></div>
+            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ss" /></div>
+            <div class="field"><label>Pension / Retirement Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-pen" /></div>
+            <div class="field"><label>Net Business / Rental Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-biz" /></div>
+            <div class="field"><label>Other Monthly Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-other" /></div>
           </div>
         </div>
 
@@ -502,15 +502,15 @@
             <div class="field"><label>Employer Name</label><input type="text" id="i2-emp" /></div>
             <div class="field"><label>How Long Employed</label><input type="text" id="i2-long" /></div>
             <div class="field"><label>Pay Frequency</label><input type="text" id="i2-freq" /></div>
-            <div class="field"><label>Monthly Gross Wages ($)</label><input type="number" step="0.01" id="i2-gross" /></div>
-            <div class="field"><label>Monthly Overtime ($)</label><input type="number" step="0.01" id="i2-ot" /></div>
-            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="number" step="0.01" id="i2-tax" /></div>
-            <div class="field"><label>Insurance Deduction ($)</label><input type="number" step="0.01" id="i2-ins" /></div>
-            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="number" step="0.01" id="i2-ret" /></div>
-            <div class="field"><label>Other Deductions ($)</label><input type="number" step="0.01" id="i2-othded" /></div>
-            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="number" step="0.01" id="i2-ss" /></div>
-            <div class="field"><label>Pension / Retirement Income ($)</label><input type="number" step="0.01" id="i2-pen" /></div>
-            <div class="field"><label>Household Contributions (Line 11) ($)</label><input type="number" step="0.01" id="f-hh-contrib" /></div>
+            <div class="field"><label>Monthly Gross Wages ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-gross" /></div>
+            <div class="field"><label>Monthly Overtime ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ot" /></div>
+            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-tax" /></div>
+            <div class="field"><label>Insurance Deduction ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ins" /></div>
+            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ret" /></div>
+            <div class="field"><label>Other Deductions ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-othded" /></div>
+            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ss" /></div>
+            <div class="field"><label>Pension / Retirement Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-pen" /></div>
+            <div class="field"><label>Household Contributions (Line 11) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="f-hh-contrib" /></div>
             <div class="field"><label>Household Contrib. Description</label><input type="text" id="f-hh-contrib-desc" /></div>
           </div>
         </div>
@@ -523,30 +523,30 @@
           <label class="check-row"><input type="checkbox" id="e-sep-hh" /> Debtor 2 Maintains Separate Household (Selects Form 106J-2)</label>
         </div>
         <div class="grid-4">
-          <div class="field"><label>Rent / Home Mortgage (L4)</label><input type="number" step="0.01" id="e-rent" /></div>
-          <div class="field"><label>Real Estate Taxes (L4a)</label><input type="number" step="0.01" id="e-retax" /></div>
-          <div class="field"><label>Home Insurance (L4b)</label><input type="number" step="0.01" id="e-homeins" /></div>
-          <div class="field"><label>Home Maintenance (L4c)</label><input type="number" step="0.01" id="e-maint" /></div>
-          <div class="field"><label>HOA / Condo Dues (L4d)</label><input type="number" step="0.01" id="e-hoa" /></div>
-          <div class="field"><label>Electricity / Heat / Gas (L6a)</label><input type="number" step="0.01" id="e-elec" /></div>
-          <div class="field"><label>Water / Sewer / Garbage (L6b)</label><input type="number" step="0.01" id="e-water" /></div>
-          <div class="field"><label>Phone / Cell / Internet / Cable (L6c)</label><input type="number" step="0.01" id="e-phone" /></div>
-          <div class="field"><label>Food &amp; Housekeeping (L7)</label><input type="number" step="0.01" id="e-food" /></div>
-          <div class="field"><label>Childcare &amp; Education (L8)</label><input type="number" step="0.01" id="e-child" /></div>
-          <div class="field"><label>Clothing &amp; Laundry (L9)</label><input type="number" step="0.01" id="e-cloth" /></div>
-          <div class="field"><label>Personal Care (L10)</label><input type="number" step="0.01" id="e-pcare" /></div>
-          <div class="field"><label>Medical &amp; Dental (L11)</label><input type="number" step="0.01" id="e-med" /></div>
-          <div class="field"><label>Transportation / Gas (L12)</label><input type="number" step="0.01" id="e-trans" /></div>
-          <div class="field"><label>Entertainment &amp; Recreation (L13)</label><input type="number" step="0.01" id="e-ent" /></div>
-          <div class="field"><label>Charitable Contributions (L14)</label><input type="number" step="0.01" id="e-char" /></div>
-          <div class="field"><label>Life Insurance (L15a)</label><input type="number" step="0.01" id="e-life" /></div>
-          <div class="field"><label>Health Insurance (L15b)</label><input type="number" step="0.01" id="e-health" /></div>
-          <div class="field"><label>Vehicle Insurance (L15c)</label><input type="number" step="0.01" id="e-vehins" /></div>
-          <div class="field"><label>Vehicle Payment 1 (L17a)</label><input type="number" step="0.01" id="e-car1" /></div>
-          <div class="field"><label>Vehicle Payment 2 (L17b)</label><input type="number" step="0.01" id="e-car2" /></div>
-          <div class="field"><label>Alimony / Child Support (L18)</label><input type="number" step="0.01" id="e-alimony" /></div>
+          <div class="field"><label>Rent / Home Mortgage (L4)</label><input type="text" inputmode="decimal" data-format="currency" id="e-rent" /></div>
+          <div class="field"><label>Real Estate Taxes (L4a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-retax" /></div>
+          <div class="field"><label>Home Insurance (L4b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-homeins" /></div>
+          <div class="field"><label>Home Maintenance (L4c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-maint" /></div>
+          <div class="field"><label>HOA / Condo Dues (L4d)</label><input type="text" inputmode="decimal" data-format="currency" id="e-hoa" /></div>
+          <div class="field"><label>Electricity / Heat / Gas (L6a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-elec" /></div>
+          <div class="field"><label>Water / Sewer / Garbage (L6b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-water" /></div>
+          <div class="field"><label>Phone / Cell / Internet / Cable (L6c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-phone" /></div>
+          <div class="field"><label>Food &amp; Housekeeping (L7)</label><input type="text" inputmode="decimal" data-format="currency" id="e-food" /></div>
+          <div class="field"><label>Childcare &amp; Education (L8)</label><input type="text" inputmode="decimal" data-format="currency" id="e-child" /></div>
+          <div class="field"><label>Clothing &amp; Laundry (L9)</label><input type="text" inputmode="decimal" data-format="currency" id="e-cloth" /></div>
+          <div class="field"><label>Personal Care (L10)</label><input type="text" inputmode="decimal" data-format="currency" id="e-pcare" /></div>
+          <div class="field"><label>Medical &amp; Dental (L11)</label><input type="text" inputmode="decimal" data-format="currency" id="e-med" /></div>
+          <div class="field"><label>Transportation / Gas (L12)</label><input type="text" inputmode="decimal" data-format="currency" id="e-trans" /></div>
+          <div class="field"><label>Entertainment &amp; Recreation (L13)</label><input type="text" inputmode="decimal" data-format="currency" id="e-ent" /></div>
+          <div class="field"><label>Charitable Contributions (L14)</label><input type="text" inputmode="decimal" data-format="currency" id="e-char" /></div>
+          <div class="field"><label>Life Insurance (L15a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-life" /></div>
+          <div class="field"><label>Health Insurance (L15b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-health" /></div>
+          <div class="field"><label>Vehicle Insurance (L15c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-vehins" /></div>
+          <div class="field"><label>Vehicle Payment 1 (L17a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-car1" /></div>
+          <div class="field"><label>Vehicle Payment 2 (L17b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-car2" /></div>
+          <div class="field"><label>Alimony / Child Support (L18)</label><input type="text" inputmode="decimal" data-format="currency" id="e-alimony" /></div>
           <div class="field"><label>Other Expense Desc. (L21)</label><input type="text" id="e-othdesc" /></div>
-          <div class="field"><label>Other Monthly Expense (L21)</label><input type="number" step="0.01" id="e-oth" /></div>
+          <div class="field"><label>Other Monthly Expense (L21)</label><input type="text" inputmode="decimal" data-format="currency" id="e-oth" /></div>
         </div>
       </div>
 
@@ -564,11 +564,11 @@
                 <option value="Married">Married</option>
               </select>
             </div>
-            <div class="field"><label>Debtor 1 YTD Gross Income ($)</label><input type="number" step="0.01" id="i1-ytd" /></div>
-            <div class="field"><label>Debtor 1 Last Year Gross ($)</label><input type="number" step="0.01" id="i1-ly" /></div>
-            <div class="field"><label>Debtor 1 Two Years Ago Gross ($)</label><input type="number" step="0.01" id="i1-2y" /></div>
-            <div class="field"><label>Debtor 2 YTD Gross Income ($)</label><input type="number" step="0.01" id="i2-ytd" /></div>
-            <div class="field"><label>Debtor 2 Last Year Gross ($)</label><input type="number" step="0.01" id="i2-ly" /></div>
+            <div class="field"><label>Debtor 1 YTD Gross Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ytd" /></div>
+            <div class="field"><label>Debtor 1 Last Year Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ly" /></div>
+            <div class="field"><label>Debtor 1 Two Years Ago Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-2y" /></div>
+            <div class="field"><label>Debtor 2 YTD Gross Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ytd" /></div>
+            <div class="field"><label>Debtor 2 Last Year Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ly" /></div>
           </div>
           <div class="muted" style="margin-top: 6px;">
             Prior addresses (<span id="sofa-pa-count">0</span>), lawsuits (<span id="sofa-law-count">0</span>), repossessions/garnishments (<span id="sofa-repo-count">0</span>), and closed accounts (<span id="sofa-closed-count">0</span>) parsed from the CIF are automatically carried into Form 107.
@@ -581,10 +581,10 @@
             <button class="btn btn-secondary btn-sm" id="btn-reset-b2030">Apply Chapter Defaults</button>
           </div>
           <div class="grid-2">
-            <div class="field"><label>Agreed Legal Fee ($)</label><input type="number" step="0.01" id="fee-agreed" /></div>
-            <div class="field"><label>Received Prior to Filing ($)</label><input type="number" step="0.01" id="fee-received" /></div>
-            <div class="field"><label>Court Filing Fee ($)</label><input type="number" step="0.01" id="fee-filing" /></div>
-            <div class="field"><label>Credit Report Fee ($)</label><input type="number" step="0.01" id="fee-cr" /></div>
+            <div class="field"><label>Agreed Legal Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-agreed" /></div>
+            <div class="field"><label>Received Prior to Filing ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-received" /></div>
+            <div class="field"><label>Court Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-filing" /></div>
+            <div class="field"><label>Credit Report Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-cr" /></div>
           </div>
           <div class="field"><label>Additional Included / Fee Notes</label><textarea id="fee-inc-other"></textarea></div>
           <div class="field"><label>Excluded Services (Item 7)</label><textarea id="fee-excluded"></textarea></div>
@@ -634,15 +634,15 @@
             </div>
             <div class="field">
               <label>Marital Adjustment Deduction (Monthly $)</label>
-              <input type="number" step="0.01" id="mt-marital-adj" />
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-marital-adj" />
             </div>
             <div class="field">
               <label>6-Month Monthly CMI (122A-1 / 122C-1) ($)</label>
-              <input type="number" step="0.01" id="mt-total-cmi" />
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-total-cmi" />
             </div>
             <div class="field">
               <label>Ch. 13 Monthly Disposable Income (122C-2 L45) ($)</label>
-              <input type="number" step="0.01" id="mt-disposable" />
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-disposable" />
             </div>
           </div>
           <div class="btn-group" style="margin-top: 6px; gap: 18px;">
@@ -878,14 +878,14 @@
           <div class="field"><label>Clients Output Folder</label><input type="text" id="set-clients-dir" /></div>
           <div class="field"><label>Means Test Site URL</label><input type="url" id="set-mt-url" placeholder="http://localhost:..." /></div>
           <div class="grid-3">
-            <div class="field"><label>Ch. 7 Filing Fee ($)</label><input type="number" step="0.01" id="set-fee-ch7" /></div>
-            <div class="field"><label>Ch. 13 Filing Fee ($)</label><input type="number" step="0.01" id="set-fee-ch13" /></div>
-            <div class="field"><label>Ch. 13 Debt Limit ($)</label><input type="number" step="1" id="set-ch13-limit" /></div>
+            <div class="field"><label>Ch. 7 Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fee-ch7" /></div>
+            <div class="field"><label>Ch. 13 Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fee-ch13" /></div>
+            <div class="field"><label>Ch. 13 Debt Limit ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-ch13-limit" /></div>
           </div>
           <div class="grid-3">
-            <div class="field"><label>FL Vehicle Cap ($/debtor)</label><input type="number" step="1" id="set-fl-veh" /></div>
-            <div class="field"><label>FL Personal Cap ($/debtor)</label><input type="number" step="1" id="set-fl-pers" /></div>
-            <div class="field"><label>FL Wildcard Cap ($/debtor)</label><input type="number" step="1" id="set-fl-wild" /></div>
+            <div class="field"><label>FL Vehicle Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-veh" /></div>
+            <div class="field"><label>FL Personal Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-pers" /></div>
+            <div class="field"><label>FL Wildcard Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-wild" /></div>
           </div>
         </div>
       </div>
@@ -894,21 +894,21 @@
         <div class="card">
           <div class="card-header"><h2>Florida Median Family Income (US Trustee)</h2></div>
           <div class="grid-3">
-            <div class="field"><label>1 Person ($)</label><input type="number" step="1" id="set-med-1" /></div>
-            <div class="field"><label>2 Persons ($)</label><input type="number" step="1" id="set-med-2" /></div>
-            <div class="field"><label>3 Persons ($)</label><input type="number" step="1" id="set-med-3" /></div>
-            <div class="field"><label>4 Persons ($)</label><input type="number" step="1" id="set-med-4" /></div>
-            <div class="field"><label>Each Additional ($)</label><input type="number" step="1" id="set-med-add" /></div>
+            <div class="field"><label>1 Person ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-1" /></div>
+            <div class="field"><label>2 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-2" /></div>
+            <div class="field"><label>3 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-3" /></div>
+            <div class="field"><label>4 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-4" /></div>
+            <div class="field"><label>Each Additional ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-add" /></div>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header"><h2>B2030 Chapter Fee Defaults</h2></div>
           <div class="grid-2">
-            <div class="field"><label>Ch. 7 Agreed Fee ($)</label><input type="number" step="0.01" id="set-b7-agreed" /></div>
-            <div class="field"><label>Ch. 7 Prior Received ($)</label><input type="number" step="0.01" id="set-b7-rec" /></div>
-            <div class="field"><label>Ch. 13 Agreed Fee ($)</label><input type="number" step="0.01" id="set-b13-agreed" /></div>
-            <div class="field"><label>Ch. 13 Prior Received ($)</label><input type="number" step="0.01" id="set-b13-rec" /></div>
+            <div class="field"><label>Ch. 7 Agreed Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b7-agreed" /></div>
+            <div class="field"><label>Ch. 7 Prior Received ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b7-rec" /></div>
+            <div class="field"><label>Ch. 13 Agreed Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b13-agreed" /></div>
+            <div class="field"><label>Ch. 13 Prior Received ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b13-rec" /></div>
           </div>
         </div>
       </div>
@@ -923,6 +923,6 @@
   <script src="/exemptions_catalog.js?v=1"></script>
   <script src="/crypto_client.js?v=2"></script>
   <script src="/cf_engine.js?v=3"></script>
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>

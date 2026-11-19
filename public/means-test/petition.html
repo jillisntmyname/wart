@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Law Offices of Jill McDonald — FLMB Tampa Division Ch. 7 & Ch. 13 Petition Creation Suite</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .firm-pill {
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      color: #e0f2fe;
+    }
+    .page-ref-badge {
+      background: #e0e7ff;
+      color: #1e40af;
+      border: 1px solid #a5b4fc;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+    }
+    .watchdog-banner {
+      background: #fffbeb;
+      border-bottom: 2px solid #f59e0b;
+      padding: 10px 24px;
+    }
+    .watchdog-inner {
+      max-width: 1480px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .inventory-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+      gap: 10px;
+    }
+    .inventory-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+    }
+    .inventory-item label {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+    .inventory-item input {
+      width: 95px;
+      padding: 4px 7px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      text-align: right;
+    }
+    .sofa-question {
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+      margin-bottom: 10px;
+    }
+    .sofa-question.flagged {
+      border-left: 4px solid #f59e0b;
+      background: #fffdf5;
+    }
+    .sofa-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .checklist-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+      margin-bottom: 8px;
+    }
+    .checklist-row.completed {
+      background: #f0fdf4;
+      border-color: #86efac;
+    }
+    .petition-page {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 28px 34px;
+      margin-bottom: 28px;
+      background: #ffffff;
+      page-break-after: always;
+    }
+    .petition-form-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .petition-form-num {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #1e3a8a;
+    }
+    .petition-form-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 2px;
+    }
+    @media print {
+      .watchdog-banner {
+        display: none !important;
+      }
+      .tab-panel#panel-pet-output {
+        display: block !important;
+      }
+      .petition-page {
+        border: none !important;
+        padding: 0 !important;
+        margin-bottom: 20px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <div class="court-seal" title="Law Offices of Jill McDonald • FLMB Tampa Division">JM</div>
+        <div class="brand-titles">
+          <h1>
+            FLMB Ch. 7 &amp; Ch. 13 Petition Creation Suite
+            <span class="court-badge">Middle District of Florida • Tampa Division</span>
+            <span class="firm-pill">Law Offices of Jill McDonald • Pinellas Park, FL</span>
+          </h1>
+          <p>Mapped 1-to-1 to the 22-Page Client Bankruptcy Information Sheet • Live UST/IRS Standards • Official Form Change &amp; Red-Flag Watchdog</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="index.html" class="btn btn-header btn-sm" title="Open the dedicated Means Test & YTD Calculator">
+          ⇄ Means Test Calculator
+        </a>
+        <button class="btn btn-sm" id="btnPetNewClient" style="background:#ef4444; color:#ffffff; border-color:#dc2626;" title="Clear all intake fields for a new client">
+          ✨ New Client / Clear All
+        </button>
+        <button class="btn btn-header btn-sm" id="btnPetCheckUpdates" title="Check for UST/IRS Standard updates and Official Form revisions">
+          🔄 Check Standards &amp; Form Alerts
+        </button>
+        <button class="btn btn-header btn-sm" id="btnPetLoadSample" title="Load a complete sample intake packet">
+          Load Sample Intake
+        </button>
+        <button class="btn btn-header btn-sm" id="btnPetExportJson" title="Save intake & petition file (.json)">
+          Save Intake (.json)
+        </button>
+        <label class="btn btn-header btn-sm" style="margin:0; cursor:pointer;" title="Open saved intake (.json)">
+          Open (.json)
+          <input type="file" id="inputPetImportJson" accept=".json" style="display:none;" />
+        </label>
+        <button class="btn btn-header btn-sm" id="btnDownloadMatrixTxt" title="Download CM/ECF Creditor Matrix (.txt) for FLMB upload">
+          ⬇ CM/ECF Matrix (.txt)
+        </button>
+        <button class="btn btn-accent btn-sm" id="btnPrintPetitionPkg">
+          🖨️ Print Petition / Client Package
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Undo / Toast Banner -->
+  <div id="petToastBanner" class="no-print" style="display:none; background:#1e293b; color:#ffffff; padding:10px 24px; border-bottom:2px solid #38bdf8;">
+    <div style="max-width:1480px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span id="petToastMessage" style="font-size:13px;">Ready.</span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-accent btn-sm" id="btnPetUndo" style="display:none;">↩ Undo Reset</button>
+        <button type="button" class="btn btn-header btn-sm" id="btnPetDismissToast">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Changes & Red-Flag Watchdog Banner -->
+  <section class="watchdog-banner no-print" id="watchdogBanner">
+    <div class="watchdog-inner">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="badge badge-manual" id="watchdogCountBadge">0 Alerts</span>
+        <span id="watchdogSummaryText" style="font-size:12.5px; color:#78350f; font-weight:600;">
+          Standards &amp; Official Form Watchdog Active: Monitoring Official Forms 101–122, FL Statutory Exemptions, and 2026 UST/IRS Standards.
+        </span>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" id="btnOpenWatchdogTab" style="padding:3px 10px; font-size:11.5px;">
+        View Form Changes &amp; Case Audit Alerts &rarr;
+      </button>
+    </div>
+  </section>
+
+  <!-- Sticky KPI Summary Ribbon -->
+  <section class="kpi-ribbon" aria-label="Live Petition & Chapter Comparison">
+    <div class="kpi-ribbon-inner">
+      <div class="kpi-pill highlight-blue">
+        <span class="kpi-label">Selected Chapter &amp; Venue</span>
+        <span class="kpi-value" id="petKpiChapter">Chapter 7</span>
+        <span class="kpi-sub" id="petKpiVenue">Pinellas County (FLMB Tampa)</span>
+      </div>
+      <div class="kpi-pill" id="petKpiMedianPill">
+        <span class="kpi-label">CMI vs. FL Median</span>
+        <span class="kpi-value" id="petKpiCmiAnnual">$0 / yr</span>
+        <span class="kpi-sub" id="petKpiMedianSub">FL Median: $0</span>
+      </div>
+      <div class="kpi-pill">
+        <span class="kpi-label">Real &amp; Personal Assets (Sch A/B)</span>
+        <span class="kpi-value" id="petKpiTotalAssets">$0.00</span>
+        <span class="kpi-sub" id="petKpiNonExemptSub">Non-Exempt Equity: $0.00</span>
+      </div>
+      <div class="kpi-pill">
+        <span class="kpi-label">Total Liabilities (Sch D + E/F)</span>
+        <span class="kpi-value" id="petKpiTotalDebt">$0.00</span>
+        <span class="kpi-sub" id="petKpiDebtSplit">Sec: $0 | Unsec: $0</span>
+      </div>
+      <div class="kpi-pill" id="petKpiBudgetPill">
+        <span class="kpi-label">Sch. I vs. Sch. J Net Cash Flow</span>
+        <span class="kpi-value" id="petKpiNetSchJ">$0.00/mo</span>
+        <span class="kpi-sub" id="petKpiSchISchJSub">Sch I: $0 | Sch J: $0</span>
+      </div>
+      <div class="kpi-pill highlight-blue">
+        <span class="kpi-label">Ch. 7 / Ch. 13 Recommendation</span>
+        <span class="kpi-value" id="petKpiRecTitle">Ch. 7 Qualifies</span>
+        <span class="kpi-sub" id="petKpiRecSub">Presumption of No Abuse</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Workspace -->
+  <main class="app-container">
+
+    <!-- Navigation Tabs (Mapped directly to the 22-Page Intake Packet) -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="nav-tab active" data-tab="panel-pet-p1" role="tab">
+        <span class="step-num">1</span>
+        <span>Pgs 1–2: Client &amp; Dependents</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p3" role="tab">
+        <span class="step-num">2</span>
+        <span>Pgs 3–4: Real Estate &amp; Mobile Home</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p5" role="tab">
+        <span class="step-num">3</span>
+        <span>Pgs 5–6: Inventory &amp; Vehicles</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p7" role="tab">
+        <span class="step-num">4</span>
+        <span>Pgs 7–9: Income, YTD &amp; Business</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p10" role="tab">
+        <span class="step-num">5</span>
+        <span>Pg 10: Living Expenses (Sch. J)</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p11" role="tab">
+        <span class="step-num">6</span>
+        <span>Pgs 11–21: SOFA &amp; Creditors</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-p22" role="tab">
+        <span class="step-num">7</span>
+        <span>Pg 22: Checklist &amp; Form Watchdog</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-pet-output" role="tab">
+        <span class="step-num">8</span>
+        <span>Printable Petition &amp; Client Report</span>
+      </button>
+    </nav>
+
+    <!-- =====================================================================
+         TAB 1: PAGES 1 & 2 — CLIENT INFO, SPOUSE, DEPENDENTS & OTHER NAMES
+         ===================================================================== -->
+    <section class="tab-panel active" id="panel-pet-p1">
+      <div class="grid-2">
+        <!-- Page 1: Debtor 1 & Case Configuration -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Debtor 1 &amp; Chapter Selection</span>
+                <span class="page-ref-badge">Intake Page 1 &rarr; Form 101</span>
+              </div>
+              <div class="card-subtitle">Client Bankruptcy Information Sheet — Law Offices of Jill McDonald</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Target Bankruptcy Chapter</label>
+                <select id="petChapter" class="form-control">
+                  <option value="7">Chapter 7 (Liquidation / Fresh Start — Forms 101–122A)</option>
+                  <option value="13">Chapter 13 ( Wage Earner Plan — Forms 101–122C)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Filing Type</label>
+                <select id="petFilingType" class="form-control">
+                  <option value="individual">Individual (Single or Married Filing Separately)</option>
+                  <option value="joint">Joint Petition (Debtor 1 &amp; Spouse Filing Together)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Today's / Target Filing Date</label>
+                <input type="date" id="petFilingDate" class="form-control mono" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Total People Living in Household</label>
+                <input type="number" id="petHouseholdSize" class="form-control" min="1" max="15" value="3" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Debtor 1 FULL Name (First, Middle, Last)</label>
+                <input type="text" id="petD1Name" class="form-control" placeholder="Full Legal Name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Debtor 1 Date of Birth</label>
+                <input type="date" id="petD1Dob" class="form-control mono" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Debtor 1 SSN (Last 4 for Form 101: xxx-xx-____)</label>
+                <input type="text" id="petD1Ssn" class="form-control mono" placeholder="xxx-xx-1234" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Street Address</label>
+                <input type="text" id="petD1Street" class="form-control" placeholder="Street Address" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">City</label>
+                <input type="text" id="petD1City" class="form-control" placeholder="e.g., Pinellas Park" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">State &amp; Zip Code</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="text" id="petD1State" class="form-control" value="FL" style="width:65px;" />
+                  <input type="text" id="petD1Zip" class="form-control mono" placeholder="33781" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">County of Residence (FLMB Tampa Division)</label>
+                <select id="petCounty" class="form-control">
+                  <option value="Pinellas">Pinellas County (FIPS 12103)</option>
+                  <option value="Hillsborough">Hillsborough County (FIPS 12057)</option>
+                  <option value="Pasco">Pasco County (FIPS 12101)</option>
+                  <option value="Hernando">Hernando County (FIPS 12053)</option>
+                  <option value="Polk">Polk County (FIPS 12105)</option>
+                  <option value="Manatee">Manatee County (FIPS 12081)</option>
+                  <option value="Sarasota">Sarasota County (FIPS 12115)</option>
+                  <option value="Hardee">Hardee County (FIPS 12049)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Length of Time at Address (Years)</label>
+                <input type="number" step="0.1" id="petYearsAtAddress" class="form-control" value="4.5" title="2+ years (730 days) in Florida required for FL state exemptions under 11 U.S.C. § 522(b)(3)(A)" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Home / Mobile Phone</label>
+                <input type="text" id="petD1Phone" class="form-control" placeholder="(727) 555-0144" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" id="petD1Email" class="form-control" placeholder="client@example.com" />
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label class="form-label">Mailing Address (If different from physical address, e.g., P.O. Box — Page 1 Bottom)</label>
+              <input type="text" id="petMailingAddress" class="form-control" placeholder="Leave blank if same as physical address" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Page 1 Spouse & Page 2 Dependents + Prior Names -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Spouse, Dependents &amp; Other Names (Past 8 Yrs)</span>
+                <span class="page-ref-badge">Intake Pages 1–2 &rarr; Form 101 &amp; Sch. J</span>
+              </div>
+              <div class="card-subtitle">Spouse details, household dependents, aliases/maiden names, and 6-month income changes</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid" style="margin-bottom:14px;">
+              <div class="form-group">
+                <label class="form-label">FULL Name of Spouse (Debtor 2)</label>
+                <input type="text" id="petD2Name" class="form-control" placeholder="Spouse Full Name (or N/A)" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse Date of Birth</label>
+                <input type="date" id="petD2Dob" class="form-control mono" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse SSN (xxx-xx-____)</label>
+                <input type="text" id="petD2Ssn" class="form-control mono" placeholder="xxx-xx-5678" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse Phone / Email</label>
+                <input type="text" id="petD2Contact" class="form-control" placeholder="Phone / Email" />
+              </div>
+            </div>
+
+            <h4 style="font-size:13px; color:var(--primary); margin-bottom:6px;">Page 2: Dependents (Name, Age, Relationship, Lives With You?)</h4>
+            <div class="table-wrap" style="margin-bottom:14px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Dependent Name (Initials on Public Form 106J)</th>
+                    <th>Age</th>
+                    <th>Relationship</th>
+                    <th>Lives With You?</th>
+                  </tr>
+                </thead>
+                <tbody id="dependentsTableBody">
+                  <!-- Populated by petition.js -->
+                </tbody>
+              </table>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Other Names Used in Past 8 Years (Maiden/Prior Married Name &amp; Dates)</label>
+                <input type="text" id="petOtherNamesUsed" class="form-control" placeholder="e.g., Maria Elena Gomez (2015–2020) or N/A" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Has income significantly increased/decreased during past 6 months? (Page 2)</label>
+                <input type="text" id="petIncomeChangeNote" class="form-control" placeholder="Explain any recent job change, overtime drop, or medical leave..." />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 2: PAGES 3 & 4 — SCHEDULE A/B REAL ESTATE & MOBILE HOME
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p3">
+      <div class="grid-2">
+        <!-- Page 3: Real Estate -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Schedule A/B: Real Estate Information</span>
+                <span class="page-ref-badge">Intake Page 3 &rarr; Sch. A/B, C, D &amp; Form 108</span>
+              </div>
+              <div class="card-subtitle">Primary residence, 1st &amp; 2nd mortgages, foreclosure status, arrears, and Keep/Surrender intent</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Own Real Estate?</label>
+                <select id="petOwnRealEstate" class="form-control">
+                  <option value="yes">Yes — Owns Real Estate</option>
+                  <option value="no">No — Rents or Lives Free</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Is This Primary Residence (FL Homestead)?</label>
+                <select id="petReIsPrimary" class="form-control">
+                  <option value="yes">Yes — Primary Residence (Homestead)</option>
+                  <option value="no">No — Non-Homestead / Investment</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Type of Real Estate</label>
+                <select id="petReType" class="form-control">
+                  <option value="Single-Family House">House</option>
+                  <option value="Condominium">Condominium</option>
+                  <option value="Mobile Home & Land">Mobile Home</option>
+                  <option value="Vacant Lot">Vacant Lot</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Name(s) on Deed</label>
+                <input type="text" id="petReDeedNames" class="form-control" placeholder="e.g., Debtor 1 &amp; Debtor 2 (Tenants by the Entireties)" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Address of Real Estate</label>
+                <input type="text" id="petReAddress" class="form-control" placeholder="Property Street, City, State, Zip" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Current Appraised / Market Value ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petReValue" class="form-control" step="100" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">1st Mortgage Company Name &amp; Address</label>
+                <input type="text" id="petReMtg1Company" class="form-control" placeholder="e.g., Wells Fargo Home Mortgage, PO Box 10335, Des Moines, IA" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">1st Mortgage Account # (Last 4) &amp; Origin Year</label>
+                <input type="text" id="petReMtg1Acct" class="form-control mono" placeholder="Acct #4491 • Orig 2019" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">1st Mortgage Monthly Payment ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petReMtg1Monthly" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">1st Mortgage Payoff Balance ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petReMtg1Payoff" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Amount Needed to Catch Up Arrears ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petReMtg1Arrears" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">In Foreclosure? / Intent for Property</label>
+                <div style="display:flex; gap:6px;">
+                  <select id="petReForeclosure" class="form-control">
+                    <option value="no">Not in Foreclosure</option>
+                    <option value="yes">YES — In Foreclosure</option>
+                  </select>
+                  <select id="petReIntent" class="form-control">
+                    <option value="Retain">Keep (Retain)</option>
+                    <option value="Surrender">Surrender</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">2nd Mortgage / HELOC Company (If Any)</label>
+                <input type="text" id="petReMtg2Company" class="form-control" placeholder="2nd Mortgage / HELOC Lender or HOA Lien" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">2nd Mortgage Monthly Pmt / Payoff / Arrears ($)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="number" id="petReMtg2Monthly" class="form-control mono" placeholder="Mo $" value="0" title="2nd Mortgage Monthly Payment" />
+                  <input type="number" id="petReMtg2Payoff" class="form-control mono" placeholder="Payoff $" value="0" title="2nd Mortgage Payoff" />
+                  <input type="number" id="petReMtg2Arrears" class="form-control mono" placeholder="Arrears $" value="0" title="2nd Mortgage Arrears" />
+                </div>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label class="form-label">Collection / Foreclosure Attorney Name &amp; Address (Page 3 Bottom — Added to Notice Matrix)</label>
+              <input type="text" id="petReCollector" class="form-control" placeholder="Name &amp; Address of Foreclosure Firm (if applicable)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Page 4: Mobile Home Specifics & Homestead Cap Check -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Mobile Home Specifics &amp; FL Homestead Analysis</span>
+                <span class="page-ref-badge">Intake Page 4 &rarr; Sch. A/B &amp; Sch. C</span>
+              </div>
+              <div class="card-subtitle">Mobile home lot rent, land ownership, attachment, and 11 U.S.C. § 522(p) Homestead Cap check</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Does Client Own a Mobile Home? (Page 4)</label>
+                <select id="petOwnMobileHome" class="form-control">
+                  <option value="no">No</option>
+                  <option value="yes">Yes — Complete Mobile Home Details</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Property Acquired Within 1,215 Days (3.33 Yrs) of Filing?</label>
+                <select id="petHomesteadRecent1215" class="form-control" title="11 U.S.C. § 522(p) caps homestead exemption if acquired within 1,215 days before filing">
+                  <option value="no">No — Owned &gt; 1,215 Days (Unlimited FL Homestead)</option>
+                  <option value="yes">Yes — Acquired Within 1,215 Days (§ 522(p) Cap Applies)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Are Wheels Removed &amp; Attached to Land?</label>
+                <select id="petMhAttached" class="form-control">
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sits in Mobile Home Park? Monthly Lot Rent ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petMhLotRent" class="form-control" step="1" value="0" /></div>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label class="form-label">Mobile Home Description (e.g., 28x40 double wide, 2BR/1BA, skirting/shed)</label>
+              <input type="text" id="petMhDescription" class="form-control" placeholder="Description of Mobile Home (if applicable)" />
+            </div>
+
+            <div class="callout" style="margin-top:18px; margin-bottom:0;" id="homesteadExemptionCallout">
+              <!-- Populated dynamically by petition.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 3: PAGES 5 & 6 — HOUSEHOLD INVENTORY, OTHER ASSETS & MOTOR VEHICLES
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p5">
+      <!-- Page 5: Household Inventory (Yard Sale Value) -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <span>Page 5: Household Inventory (Yard Sale Value) &amp; Other Assets</span>
+              <span class="page-ref-badge">Intake Page 5 &rarr; Sch. A/B Part 3 &amp; Sch. C</span>
+            </div>
+            <div class="card-subtitle">Enter the Yard Sale Value (NOT replacement value) for each item checked on Page 5 of the intake sheet</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="badge badge-ust" id="inventoryTotalBadge">Total Household Inventory: $0.00</span>
+            <button type="button" class="btn btn-outline btn-sm" id="btnZeroInventory">Zero All Inventory</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="inventory-grid" id="householdInventoryGrid">
+            <!-- Populated dynamically by petition.js with all Page 5 items -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Page 6: Motor Vehicles (Up to 3 Vehicles) & Bank/Retirement Accounts (Pages 13–15) -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Page 6: Motor Vehicles (Cars, Trucks, SUVs, Motorcycles, Boats)</span>
+                <span class="page-ref-badge">Intake Page 6 &rarr; Sch. A/B, C, D &amp; Form 108</span>
+              </div>
+              <div class="card-subtitle">Includes automatic Florida $5,000 per debtor Motor Vehicle Exemption (Fla. Stat. § 222.25(1))</div>
+            </div>
+          </div>
+          <div class="card-body" id="vehiclesContainerBody">
+            <!-- Populated dynamically by petition.js -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Pages 5, 13–16: Bank Accounts, Retirement, Life Ins. &amp; Tax Refund</span>
+                <span class="page-ref-badge">Intake Pgs 5, 13–16 &rarr; Sch. A/B Part 4 &amp; Sch. C</span>
+              </div>
+              <div class="card-subtitle">Checking/savings balances, landlord/utility deposits, 401(k)/pension, life insurance, and expected tax refund</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Bank #1 Name &amp; Checking/Savings Balance ($)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="text" id="petBank1Name" class="form-control" placeholder="e.g., Suncoast Credit Union" />
+                  <input type="number" id="petBank1Bal" class="form-control mono" step="0.01" value="0" style="width:120px;" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Bank #2 Name &amp; Checking/Savings Balance ($)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="text" id="petBank2Name" class="form-control" placeholder="e.g., Chase Bank" />
+                  <input type="number" id="petBank2Bal" class="form-control mono" step="0.01" value="0" style="width:120px;" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Rent / Utility Security Deposits ($ — Pgs 5 &amp; 14)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petSecurityDeposits" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">401(k) / Pension / IRA Total Balance ($ — Pgs 7, 14, 15)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petRetirementBal" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Whole Life Insurance Cash Surrender Value ($ — Pg 14)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petWholeLifeCash" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Stocks, Bonds, CDs, Mutual Funds ($ — Pgs 5 &amp; 15)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petStocksBonds" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Expected / Received Tax Refund This Year ($ — Pg 21)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petTaxRefund" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Personal Injury / Lawsuit / Inheritance Claim ($ — Pgs 16–18)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petClaimsOwed" class="form-control" step="1" value="0" /></div>
+              </div>
+            </div>
+
+            <div class="callout" style="margin-top:16px; margin-bottom:0;" id="exemptionAuditSummaryBox">
+              <!-- Populated dynamically by petition.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 4: PAGES 7, 8 & 9 — DEBTOR 1 & 2 INCOME, TWO-STATEMENT YTD & BUSINESS
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p7">
+      <div class="grid-2">
+        <!-- Page 7: Debtor 1 Income & Two-Statement YTD -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Page 7: Debtor 1 Employment, YTD &amp; SOFA Income</span>
+                <span class="page-ref-badge">Intake Page 7 &rarr; Sch. I, SOFA &amp; Form 122</span>
+              </div>
+              <div class="card-subtitle">Employer info, Two-Statement YTD (e.g., April vs. October), and Prior 2 Years Gross Income</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Employer's Name &amp; Address (Page 7)</label>
+                <input type="text" id="petD1Employer" class="form-control" placeholder="Employer Name, City, State" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Job Title &amp; Length of Time at Job</label>
+                <input type="text" id="petD1JobTitle" class="form-control" placeholder="e.g., Registered Nurse • 6 Years" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Pay Frequency (Page 7 Checkboxes)</label>
+                <select id="petD1PayFreq" class="form-control">
+                  <option value="biweekly">Every 2 Weeks (Bi-Weekly — 26/yr)</option>
+                  <option value="weekly">Weekly (52/yr)</option>
+                  <option value="semimonthly">Twice a Month (Semi-Monthly — 24/yr)</option>
+                  <option value="monthly">Monthly (12/yr)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Current Year-to-Date (YTD) Gross Income ($ — SOFA Q4)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1YtdCurrent" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gross Income Last Year ($ — SOFA Q4)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1GrossLastYr" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gross Income 2 Years Ago ($ — SOFA Q4)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1Gross2YrsAgo" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" id="lblD1BaselineYtd">Baseline Stub YTD (e.g., Last Stub of Apr $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1BaselineYtd" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" id="lblD1EndingYtd">Ending Stub YTD (e.g., Last Stub of Oct $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1EndingYtd" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly Payroll Taxes (Fed + SS + Medicare $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoTaxes" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly Payroll Health/Dental/Vision + HSA ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoHealth" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly 401(k) / Retirement Deduction + Loan ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoRetire" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly Union Dues + Court-Ordered Support ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoUnionDso" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly Social Security / VA Disability ($ — Excluded CMI)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoSocSec" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Monthly Pension / Child Support / Rental Received ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD1MoOtherInc" class="form-control" step="0.01" value="0" /></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Page 8: Debtor 2 (Spouse) & Page 9: Business Owners -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Pages 8 &amp; 9: Debtor 2 (Spouse) &amp; Self-Employed Business</span>
+                <span class="page-ref-badge">Intake Pages 8–9 &rarr; Sch. I, SOFA &amp; Form 122</span>
+              </div>
+              <div class="card-subtitle">Spouse employment/YTD and Page 9 Business Owners monthly income &amp; expense breakdown</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid" style="margin-bottom:16px;">
+              <div class="form-group">
+                <label class="form-label">Debtor 2 Employer &amp; Job Title (Page 8)</label>
+                <input type="text" id="petD2Employer" class="form-control" placeholder="Spouse Employer &amp; Title" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse Prior 2 Yrs Gross (Last Yr / 2 Yrs Ago $)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="number" id="petD2GrossLastYr" class="form-control mono" placeholder="Last Yr $" value="0" />
+                  <input type="number" id="petD2Gross2YrsAgo" class="form-control mono" placeholder="2 Yrs Ago $" value="0" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" id="lblD2BaselineYtd">Spouse Baseline Stub YTD (Apr $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD2BaselineYtd" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" id="lblD2EndingYtd">Spouse Ending Stub YTD (Oct $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD2EndingYtd" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse Monthly Payroll Taxes ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petD2MoTaxes" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spouse Monthly Health Ins + Retirement ($)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="number" id="petD2MoHealth" class="form-control mono" placeholder="Health $" value="0" />
+                  <input type="number" id="petD2MoRetire" class="form-control mono" placeholder="Retire $" value="0" />
+                </div>
+              </div>
+            </div>
+
+            <h4 style="font-size:13px; color:var(--primary); border-top:1px solid var(--border-color); padding-top:12px; margin-bottom:8px;">
+              Page 9: Business Owners / Self-Employment (Past 12 Months Average)
+            </h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Average Monthly Business Gross Income ($)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petBizGross" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Average Monthly Business Expenses (Rent, Supplies, Wages $)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="petBizExpenses" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Did You File Income Taxes for All Business Years? (Page 9)</label>
+                <select id="petBizTaxesFiled" class="form-control">
+                  <option value="yes">Yes — All Tax Returns Filed</option>
+                  <option value="no">NO — Unfiled Tax Years Exist (Triggers Alert!)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Unfiled Tax Years (If Any — Page 9 Bottom)</label>
+                <input type="text" id="petUnfiledTaxYears" class="form-control" placeholder="e.g., None" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 5: PAGE 10 — MONTHLY LIVING EXPENSES (OFFICIAL FORM 106J SCHEDULE J)
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p10">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <span>Page 10: Monthly Living Expenses (Official Form 106J — Schedule J)</span>
+              <span class="page-ref-badge">Intake Page 10 &rarr; Schedule J</span>
+            </div>
+            <div class="card-subtitle">Every expense line from Page 10 of the Law Offices of Jill McDonald intake sheet</div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <span class="badge badge-ust" id="schJTotalBadge">Schedule J Total: $0.00/mo</span>
+            <button type="button" class="btn btn-outline btn-sm" id="btnZeroScheduleJ">Zero All Schedule J</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="inventory-grid" id="scheduleJExpensesGrid">
+            <!-- Populated dynamically by petition.js with all Page 10 expense items -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 6: PAGES 11–21 — STATEMENT OF FINANCIAL AFFAIRS (SOFA) & CREDITORS
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p11">
+      <div class="grid-2">
+        <!-- Pages 11-21 SOFA Key Disclosures -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Pages 11–21: Statement of Financial Affairs (Official Form 107)</span>
+                <span class="page-ref-badge">Intake Pages 11–21 &rarr; Form 107 SOFA</span>
+              </div>
+              <div class="card-subtitle">Answers automatically trigger statutory red-flag warnings if "YES" is selected</div>
+            </div>
+          </div>
+          <div class="card-body" id="sofaQuestionsContainer">
+            <!-- Populated dynamically by petition.js -->
+          </div>
+        </div>
+
+        <!-- Priority & General Unsecured Creditors (Schedule E/F & Creditor Matrix) -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Schedule E/F: Priority &amp; Unsecured Debt Sheets + Creditor Matrix</span>
+                <span class="page-ref-badge">Schedule E/F &amp; FLMB Matrix</span>
+              </div>
+              <div class="card-subtitle">Student loans (Pg 16), court fines (Pg 16), back child support (Pg 16), taxes, medical, and credit cards</div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btnAddUnsecuredCreditor">+ Add Creditor</button>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Creditor Name</th>
+                    <th>Mailing Address (City, ST, Zip)</th>
+                    <th>Acct # (Last 4)</th>
+                    <th>Type (Sch E/F)</th>
+                    <th>Claim Amount ($)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="creditorListTableBody">
+                  <!-- Populated dynamically by petition.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 7: PAGE 22 — DOCUMENT CHECKLIST & OFFICIAL FORM / STANDARDS WATCHDOG
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-p22">
+      <div class="grid-2">
+        <!-- Page 22 Document Checklist -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Page 22: Client Bankruptcy Document Checklist</span>
+                <span class="page-ref-badge">Intake Page 22</span>
+              </div>
+              <div class="card-subtitle">Track required documents before filing in the FLMB Tampa Division</div>
+            </div>
+            <span class="badge badge-success" id="docChecklistProgressBadge">0 / 10 Received</span>
+          </div>
+          <div class="card-body" id="documentChecklistBody">
+            <!-- Populated dynamically by petition.js -->
+          </div>
+        </div>
+
+        <!-- Standards & Official Bankruptcy Form Changes Watchdog -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <span>Official Form Changes, Statutory Adjustments &amp; Case Audit Watchdog</span>
+                <span class="badge badge-ust">Live Monitor</span>
+              </div>
+              <div class="card-subtitle">Warns of Judicial Conference Official Form revisions, FL statutory updates, and case-specific issues</div>
+            </div>
+          </div>
+          <div class="card-body" id="watchdogDetailPanel">
+            <!-- Populated dynamically by petition.js -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 8: PRINTABLE OFFICIAL PETITION PACKAGE & CLIENT SUMMARY
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-pet-output">
+      <div class="report-toolbar no-print">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <strong>Select Output Package:</strong>
+          <div class="mode-switch">
+            <button type="button" class="mode-btn active" data-outmode="petition">Full Official Petition Package (Forms 101–122)</button>
+            <button type="button" class="mode-btn" data-outmode="client">Client-Friendly Plain-English Summary &amp; Checklist</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-outline btn-sm" id="btnExportMatrixFromReport">⬇ Download CM/ECF Matrix (.txt)</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnPrintFromReportTab">🖨️ Print / Save PDF</button>
+        </div>
+      </div>
+
+      <div class="printable-sheet" id="petitionPrintableOutput">
+        <!-- Dynamically rendered by petition.js -->
+      </div>
+    </section>
+
+  </main>
+
+  <script src="standards.js"></script>
+  <script src="petition.js"></script>
+</body>
+</html>

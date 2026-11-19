@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FLMB Tampa Division — Chapter 13 Means Test Calculator (Forms 122C-1 & 122C-2)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <div class="court-seal" title="Middle District of Florida - Tampa Division">FLMB</div>
+        <div class="brand-titles">
+          <h1>
+            Chapter 13 Means Test Calculator
+            <span class="court-badge">Middle District of Florida • Tampa Division</span>
+          </h1>
+          <p>Official Forms 122C-1 &amp; 122C-2 • Paystub &amp; YTD Engine • Live UST/IRS Standards + Manual Override • Client Report Studio</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="petition.html" class="btn btn-sm" style="background:#38bdf8; color:#0f172a; font-weight:700;" title="Open the full 22-Page Intake & Ch. 7 / Ch. 13 Petition Creation Suite">
+          📋 Full Ch. 7 / 13 Petition Suite
+        </a>
+        <button class="btn btn-sm" id="btnNewBlankClient" style="background:#ef4444; color:#ffffff; border-color:#dc2626;" title="Clear all current client figures and start a fresh blank client">
+          ✨ New Client / Clear All
+        </button>
+        <button class="btn btn-header btn-sm" id="btnHeaderAutoUpdateStandards" title="Automatically check and update IRS and U.S. Trustee standards">
+          🔄 Auto-Update UST/IRS Standards
+        </button>
+        <button class="btn btn-header btn-sm" id="btnLoadSampleAbove" title="Load a realistic Above-Median Tampa Division sample case">
+          Sample (Above Median)
+        </button>
+        <button class="btn btn-header btn-sm" id="btnLoadSampleBelow" title="Load a realistic Below-Median Tampa Division sample case">
+          Sample (Below Median)
+        </button>
+        <button class="btn btn-header btn-sm" id="btnExportJson" title="Save case file to JSON">
+          Export Case (.json)
+        </button>
+        <label class="btn btn-header btn-sm" style="margin:0; cursor:pointer;" title="Import saved case file">
+          Import Case
+          <input type="file" id="inputImportJson" accept=".json" style="display:none;" />
+        </label>
+        <button class="btn btn-accent btn-sm" id="btnQuickPrintReport">
+          🖨️ Print Client Report
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Undo / Notification Banner -->
+  <div id="statusToastBanner" class="no-print" style="display:none; background:#1e293b; color:#ffffff; padding:10px 24px; border-bottom:2px solid #38bdf8;">
+    <div style="max-width:1480px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span id="statusToastMessage" style="font-size:13px; font-weight:500;">Client data cleared for a new client.</span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-accent btn-sm" id="btnUndoReset" style="display:none;">↩ Undo &amp; Restore Previous Client</button>
+        <button type="button" class="btn btn-header btn-sm" id="btnDismissToast">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky KPI Summary Ribbon -->
+  <section class="kpi-ribbon" aria-label="Live Means Test Summary">
+    <div class="kpi-ribbon-inner">
+      <div class="kpi-pill highlight-blue">
+        <span class="kpi-label">6-Mo Lookback CMI (122C-1)</span>
+        <span class="kpi-value" id="kpiMonthlyCmi">$0.00</span>
+        <span class="kpi-sub" id="kpiAnnualCmi">Annualized: $0.00</span>
+      </div>
+      <div class="kpi-pill" id="kpiMedianPill">
+        <span class="kpi-label">FL Median Threshold</span>
+        <span class="kpi-value" id="kpiFlMedian">$0.00</span>
+        <span class="kpi-sub" id="kpiMedianStatus">Below Median (36-Mo Plan)</span>
+      </div>
+      <div class="kpi-pill">
+        <span class="kpi-label">IRS / UST Standards Total</span>
+        <span class="kpi-value" id="kpiIrsStandards">$0.00</span>
+        <span class="kpi-sub" id="kpiCountyLabel">Hillsborough County (Tampa MSA)</span>
+      </div>
+      <div class="kpi-pill">
+        <span class="kpi-label">Other &amp; Payroll Deductions</span>
+        <span class="kpi-value" id="kpiOtherDeductions">$0.00</span>
+        <span class="kpi-sub" id="kpiSecuredPrioritySub">Secured/Priority: $0.00/mo</span>
+      </div>
+      <div class="kpi-pill" id="kpiMdiPill">
+        <span class="kpi-label">Monthly Disposable Income</span>
+        <span class="kpi-value" id="kpiMdiValue">$0.00</span>
+        <span class="kpi-sub" id="kpiMdiSub">Form 122C-2 Line 45</span>
+      </div>
+      <div class="kpi-pill highlight-blue">
+        <span class="kpi-label">Est. Unsecured Pool (60 Mo)</span>
+        <span class="kpi-value" id="kpiUnsecuredPool">$0.00</span>
+        <span class="kpi-sub" id="kpiEstPlanPayment">Est. Plan Base: $0.00/mo</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Workspace Container -->
+  <main class="app-container">
+
+    <!-- Step Navigation Tabs -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="nav-tab active" data-tab="panel-setup" role="tab">
+        <span class="step-num">1</span>
+        <span>Case &amp; Tampa Division Setup</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-income" role="tab">
+        <span class="step-num">2</span>
+        <span>Pay Statements &amp; YTD Income</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-deductions" role="tab">
+        <span class="step-num">3</span>
+        <span>IRS/UST Standards &amp; Deductions</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-debts" role="tab">
+        <span class="step-num">4</span>
+        <span>Secured, Priority &amp; Ch. 13 Plan</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-report" role="tab">
+        <span class="step-num">5</span>
+        <span>Printable Client &amp; Form Reports</span>
+      </button>
+      <button class="nav-tab" data-tab="panel-standards" role="tab">
+        <span class="step-num">⚙</span>
+        <span>UST / IRS Standards Manager</span>
+      </button>
+    </nav>
+
+    <!-- =====================================================================
+         TAB 1: CASE & TAMPA DIVISION SETUP
+         ===================================================================== -->
+    <section class="tab-panel active" id="panel-setup">
+      <div class="grid-2">
+        <!-- Client & Filing Setup -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Client, Filing &amp; Tampa Division Jurisdiction</div>
+              <div class="card-subtitle">Select the Tampa Division county and expected filing date to set the 6-month lookback window</div>
+            </div>
+            <span class="badge badge-ust" id="activeStandardsBadge">2026 UST Standards Active</span>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="clientName">Debtor 1 Full Name</label>
+                <input type="text" id="clientName" class="form-control" placeholder="e.g., Maria &amp; Carlos Rodriguez" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="spouseName">Debtor 2 / Non-Filing Spouse Name</label>
+                <input type="text" id="spouseName" class="form-control" placeholder="Optional" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="caseNumber">Matter / Case Reference</label>
+                <input type="text" id="caseNumber" class="form-control mono" placeholder="e.g., 8:26-bk-04192-MGW" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="filingStatus">Marital &amp; Filing Status (Form 122C-1)</label>
+                <select id="filingStatus" class="form-control">
+                  <option value="single">Single / Unmarried</option>
+                  <option value="joint">Married — Filing Jointly</option>
+                  <option value="married_separate_living_together">Married — Filing Individually (Living Together)</option>
+                  <option value="married_separate_apart">Married — Filing Individually (Living Apart)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="filingDate">Expected Bankruptcy Filing Date</label>
+                <input type="date" id="filingDate" class="form-control mono" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="tampaCounty">FLMB Tampa Division County</label>
+                <select id="tampaCounty" class="form-control">
+                  <option value="Hillsborough">Hillsborough County (Tampa MSA — FIPS 12057)</option>
+                  <option value="Pinellas">Pinellas County (Tampa MSA — FIPS 12103)</option>
+                  <option value="Pasco">Pasco County (Tampa MSA — FIPS 12101)</option>
+                  <option value="Hernando">Hernando County (Tampa MSA — FIPS 12053)</option>
+                  <option value="Polk">Polk County (South Region — FIPS 12105)</option>
+                  <option value="Manatee">Manatee County (South Region — FIPS 12081)</option>
+                  <option value="Sarasota">Sarasota County (South Region — FIPS 12115)</option>
+                  <option value="Hardee">Hardee County (South Region — FIPS 12049)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="standardsPresetSelect">
+                  <span>UST / IRS Standards Period</span>
+                  <button type="button" class="btn btn-outline btn-sm" id="btnSetupAutoUpdateStandards" style="padding:1px 7px; font-size:11px;">🔄 Auto-Update</button>
+                </label>
+                <select id="standardsPresetSelect" class="form-control">
+                  <option value="2026-mid">Current UST / IRS Standards (Effective Mid-2026)</option>
+                  <option value="2025-spring">Prior 2025 UST / IRS Standards (April/May 2025)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="callout" style="margin-top: 16px; margin-bottom: 0;">
+              <div class="callout-title">Statutory 6-Month Lookback Window (11 U.S.C. § 101(10A))</div>
+              <div id="lookbackWindowText">
+                Based on your expected filing date, the 6 full calendar months prior to filing are <strong>May 1, 2026 – October 31, 2026</strong>. All gross income received during these 6 calendar months (regardless of when earned) is averaged by dividing by 6.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Household & Standards Drivers -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Household Size, Vehicles &amp; Local Standard Drivers</div>
+              <div class="card-subtitle">Directly controls Florida Median Income, IRS National Standards, and Tampa County Allowances</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="householdSize">
+                  <span>Household Size (People)</span>
+                  <span class="badge badge-ust">Lines 16 &amp; 6–9</span>
+                </label>
+                <input type="number" id="householdSize" class="form-control" min="1" max="15" step="1" value="3" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="membersUnder65">Members Under Age 65</label>
+                <input type="number" id="membersUnder65" class="form-control" min="0" max="15" step="1" value="3" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="members65Plus">Members Age 65 or Older</label>
+                <input type="number" id="members65Plus" class="form-control" min="0" max="15" step="1" value="0" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dependentChildrenUnder18">Dependent Children Under 18</label>
+                <input type="number" id="dependentChildrenUnder18" class="form-control" min="0" max="12" step="1" value="1" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="vehicleCount">Household Vehicles Operated</label>
+                <select id="vehicleCount" class="form-control">
+                  <option value="0">0 Vehicles (Public Transit Only)</option>
+                  <option value="1">1 Vehicle</option>
+                  <option value="2" selected>2 or More Vehicles</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="olderVehicleCount">Older / High-Mileage Free &amp; Clear Cars</label>
+                <select id="olderVehicleCount" class="form-control" title="Optional $200/mo additional operating allowance for free-and-clear vehicles >6 yrs old or >75,000 miles">
+                  <option value="0" selected>0 Older Free-and-Clear Vehicles</option>
+                  <option value="1">1 Older Vehicle (+$200/mo Operating Option)</option>
+                  <option value="2">2 Older Vehicles (+$400/mo Operating Option)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="claimPublicTransit">Claim Public Transportation Standard?</label>
+                <select id="claimPublicTransit" class="form-control">
+                  <option value="no" selected>No</option>
+                  <option value="yes">Yes — Include National Standard ($220/mo)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="claim5PercentFood">Claim 5% Additional Food &amp; Apparel?</label>
+                <select id="claim5PercentFood" class="form-control">
+                  <option value="no" selected>No</option>
+                  <option value="yes">Yes — Include 5% Food &amp; Clothing Allowance</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Live Lookup Preview Table for Selected County & Household Size -->
+            <div class="table-wrap" style="margin-top: 16px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Applicable Standard for Your Selection</th>
+                    <th>Jurisdiction / Basis</th>
+                    <th style="text-align:right;">Allowed Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="setupStandardsPreviewBody">
+                  <!-- Populated dynamically by app.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Law Firm Branding & Client Report Customization -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Law Firm Information &amp; Custom Attorney Commentary (For Printable Client Reports)</div>
+            <div class="card-subtitle">Appears on the letterhead and summary section of the printable client explanation report</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="firmName">Law Firm Name</label>
+              <input type="text" id="firmName" class="form-control" value="Law Offices of Jill McDonald" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="attorneyName">Attorney / Preparer Name</label>
+              <input type="text" id="attorneyName" class="form-control" value="Jill McDonald, Esq." />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="firmContact">Office Address / Phone / Email</label>
+              <input type="text" id="firmContact" class="form-control" value="7500 65th St. North, Pinellas Park, FL 33781 • 727.231.4300 • Info@JillMcDonald.com" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label" for="attorneyCustomNote">Custom Attorney Note to Client (Included in Printable Client Report)</label>
+            <textarea id="attorneyCustomNote" class="form-control" rows="2" placeholder="Add any case-specific message for your client..."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 2: PAY STATEMENTS & YTD INCOME (FORM 122C-1)
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-income">
+      <div class="callout">
+        <div class="callout-title" id="incomeTabCalloutTitle">Two-Statement YTD Means Test Method (e.g., Last Stub of April vs. Last Stub of October)</div>
+        <div id="incomeTabCalloutBody">
+          To calculate the exact 6-month lookback income and deductions from YTD pay statements, enter the YTD figures from
+          <strong>Statement #1 (Last Pay Statement from the month before the 6-month window, e.g., April)</strong> and
+          <strong>Statement #2 (Last Pay Statement from the final month of the 6-month window, e.g., October)</strong>.
+          The calculator subtracts Statement #1 YTD from Statement #2 YTD to get the exact 6-month total, divides by 6, and automatically populates all corresponding Form 122C-1 and Form 122C-2 lines!
+        </div>
+      </div>
+
+      <!-- Earner 1 Card -->
+      <div class="card" id="earner1Card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <span>Debtor 1 Employment &amp; Pay Statements</span>
+              <span class="badge badge-paystub" id="d1CalculatedBadge">Avg Gross CMI: $0.00/mo</span>
+            </div>
+            <div class="card-subtitle">Enter YTD totals from the two boundary pay statements (or switch to individual paystubs / manual entry)</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnClearD1Pay" title="Reset all Debtor 1 pay statement amounts to $0.00">Clear Debtor 1 Pay</button>
+            <div class="mode-switch" role="group" aria-label="Debtor 1 Entry Mode">
+              <button type="button" class="mode-btn active" data-earner="d1" data-mode="ytd">Two-Statement YTD (Apr vs. Oct)</button>
+              <button type="button" class="mode-btn" data-earner="d1" data-mode="stubs">Individual Paystubs Log</button>
+              <button type="button" class="mode-btn" data-earner="d1" data-mode="manual">Direct / Frequency</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body" id="d1IncomeBody">
+          <!-- Dynamically rendered by app.js based on mode -->
+        </div>
+      </div>
+
+      <!-- Earner 2 Card -->
+      <div class="card" id="earner2Card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <span>Debtor 2 / Spouse Employment &amp; Pay Statements</span>
+              <span class="badge badge-paystub" id="d2CalculatedBadge">Avg Gross CMI: $0.00/mo</span>
+            </div>
+            <div class="card-subtitle">Include if filing jointly or if married living together (non-filing spouse separate expenses can be deducted below)</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnClearD2Pay" title="Reset all Debtor 2 pay statement amounts to $0.00">Clear Debtor 2 Pay</button>
+            <label class="override-toggle">
+              <input type="checkbox" id="enableDebtor2" checked />
+              <strong>Include Debtor 2 / Spouse Income</strong>
+            </label>
+            <div class="mode-switch" role="group" aria-label="Debtor 2 Entry Mode">
+              <button type="button" class="mode-btn active" data-earner="d2" data-mode="ytd">Two-Statement YTD (Apr vs. Oct)</button>
+              <button type="button" class="mode-btn" data-earner="d2" data-mode="stubs">Individual Paystubs Log</button>
+              <button type="button" class="mode-btn" data-earner="d2" data-mode="manual">Direct / Frequency</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body" id="d2IncomeBody">
+          <!-- Dynamically rendered by app.js based on mode -->
+        </div>
+      </div>
+
+      <!-- Other CMI Sources & Statutory Exclusions -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Other Monthly Income Included in CMI (Form 122C-1 Lines 3–10)</div>
+              <div class="card-subtitle">6-month average of non-wage income received during the lookback window</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="incBusinessGross">Gross Business / 1099 / Gig Receipts (Mo. Avg)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incBusinessGross" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incBusinessExpenses">Ordinary &amp; Necessary Business Expenses (Mo. Avg)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incBusinessExpenses" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incRentalNet">Net Rental &amp; Real Property Income (Line 4c)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incRentalNet" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incInterestDiv">Interest, Dividends &amp; Royalties (Line 5)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incInterestDiv" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incPension">Pension &amp; Retirement Income (Taxable/Non-SS, Line 6)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incPension" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incSupportContrib">Alimony, Child Support &amp; Household Contributions (Lines 7–8)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incSupportContrib" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incUnemployment">Unemployment Compensation (Line 9)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incUnemployment" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="incOtherCmi">Other CMI Income (Workers' Comp, Annuity, Line 10)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="incOtherCmi" class="form-control" step="0.01" value="0" /></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Statutory Exclusions &amp; Marital Adjustment (Line 13)</div>
+              <div class="card-subtitle">Excluded from CMI by statute (Social Security, VA / HAVEN Act) or deducted for non-filing spouse</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="exclSocialSecurity">
+                  <span>Social Security Act Benefits (SSI / SSDI / Retirement)</span>
+                  <span class="badge badge-success">Excluded</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="exclSocialSecurity" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="exclVaHaven">
+                  <span>VA Disability / DoD Combat-Related (HAVEN Act)</span>
+                  <span class="badge badge-success">Excluded</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="exclVaHaven" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="maritalAdjustment">
+                  <span>Marital Adjustment Deduction (Form 122C-1 Line 13)</span>
+                  <span class="badge badge-ust">Non-Filing Spouse</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="maritalAdjustment" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="maritalAdjustmentNotes">Marital Adjustment Itemization Note</label>
+                <input type="text" id="maritalAdjustmentNotes" class="form-control" placeholder="e.g., Non-filing spouse separate car note, credit cards, student loans" />
+              </div>
+            </div>
+            <div class="callout success" style="margin-top: 14px; margin-bottom: 0;">
+              <div class="callout-title">Form 122C-1 Median Income Result</div>
+              <div id="form122c1ResultCallout"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 3: IRS / UST STANDARDS & DEDUCTIONS (FORM 122C-2 PARTS 1 & 2)
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-deductions">
+      <div class="callout">
+        <div class="callout-title">IRS &amp; UST Standards + Usual Expense Deductions (With Manual Override on Every Category)</div>
+        <div>
+          Every IRS National and Tampa Division Local Standard below updates automatically from your county and household settings.
+          Payroll deductions (Taxes, Insurance, Mandatory Retirement, 401(k), Union Dues, DSO) sync automatically from your Pay Statements / YTD entries in Step 2.
+          <strong>Check "Manual Override" on any line</strong> to enter a custom figure while keeping a clear comparison against the official standard.
+        </div>
+      </div>
+
+      <!-- Part 1A: IRS National & Tampa Division Local Standards -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Part 1A: IRS National &amp; FLMB Tampa Division Local Standards (Form 122C-2 Lines 6–15)</div>
+            <div class="card-subtitle">Standardized living allowances for Food/Apparel, Housing &amp; Utilities, Transportation, and Out-of-Pocket Health Care</div>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btnResetAllStandardOverrides">Reset All Standard Overrides</button>
+        </div>
+        <div class="card-body">
+          <div class="deduction-list" id="irsStandardsList">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Part 1B: Other Necessary Expenses & Payroll Deductions -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Part 1B: Other Necessary Expenses &amp; Usual Payroll Deduction Categories (Lines 16–24)</div>
+            <div class="card-subtitle">Taxes, involuntary deductions, life insurance, court-ordered support, childcare, extra healthcare, and telecom</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="deduction-list" id="otherNecessaryList">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Part 1C: Additional Statutory Expense Deductions & Retirement -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Part 1C: Health Insurance, Education, Charitable, Retirement (401k) &amp; Special Circumstances (Lines 25–32, 41, 43)</div>
+            <div class="card-subtitle">Statutory deductions including Health/Disability/HSA, Dependent Education, Voluntary 401(k)/Loan, and Lanning adjustments</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="deduction-list" id="additionalDeductionsList">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 4: SECURED, PRIORITY & CHAPTER 13 PLAN (FORM 122C-2 PART 3)
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-debts">
+      <div class="grid-2">
+        <!-- Secured Debt Payments (Line 33) -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Future Payments on Secured Claims (Form 122C-2 Line 33)</div>
+              <div class="card-subtitle">Total payments coming due in the 60 months after filing divided by 60 (automatically offsets Housing Line 9b &amp; Vehicle Line 13b/e)</div>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="btnClearDebts" title="Reset all secured, arrearage, and priority claims to $0.00">Clear All Debts</button>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="secMortgage1">
+                  <span>1st Mortgage / Home Loan (Monthly Avg over 60 Mo)</span>
+                  <span class="badge badge-ust">Offsets Line 9b</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secMortgage1" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="secMortgage2Hoa">
+                  <span>2nd Mortgage / HELOC / Mandatory HOA &amp; Escrows</span>
+                  <span class="badge badge-ust">Offsets Line 9b</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secMortgage2Hoa" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="secRentActual">
+                  <span>Actual Monthly Rent (If Renting — Reference Only)</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secRentActual" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="secCar1">
+                  <span>Vehicle 1 Loan Payment (60-Mo Avg: Total Remaining ÷ 60)</span>
+                  <span class="badge badge-ust">Offsets Line 13b</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secCar1" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="secCar2">
+                  <span>Vehicle 2 Loan Payment (60-Mo Avg: Total Remaining ÷ 60)</span>
+                  <span class="badge badge-ust">Offsets Line 13e</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secCar2" class="form-control" step="0.01" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="secOther">
+                  <span>Other Secured Debt (Furniture, IRS Lien, etc. ÷ 60)</span>
+                </label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="secOther" class="form-control" step="0.01" value="0" /></div>
+              </div>
+            </div>
+
+            <div class="callout" style="margin-top: 16px; margin-bottom: 0;">
+              <div class="callout-title">How Form 122C-2 Avoids Double-Counting Housing &amp; Car Payments</div>
+              <div id="securedOffsetExplanation"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cure Amounts (Line 34), Priority Claims (Line 35) & Trustee Fee (Line 36) -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Arrearages (Line 34), Priority Claims (Line 35) &amp; FLMB Trustee Fee (Line 36)</div>
+              <div class="card-subtitle">Enter total claim amounts — the calculator automatically divides by 60 to compute the monthly deduction</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="arrearsMortgageTotal">Total Mortgage / HOA Arrearage to Cure ($ Total)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="arrearsMortgageTotal" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="arrearsOtherTotal">Total Vehicle / Other Secured Arrears ($ Total)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="arrearsOtherTotal" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="priorityTaxTotal">Priority IRS / Tax Claims ($ Total under § 507(a)(8))</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="priorityTaxTotal" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="priorityDsoTotal">Priority Domestic Support Arrears ($ Total under § 507(a)(1))</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="priorityDsoTotal" class="form-control" step="1" value="0" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="priorityAttyFees">Unpaid Ch. 13 Attorney Fees in Plan ($ Total)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="priorityAttyFees" class="form-control" step="1" value="3500" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="generalUnsecuredTotal">Estimated Total Non-Priority Unsecured Debt ($ Total)</label>
+                <div class="input-prefix-wrap"><span class="input-prefix">$</span><input type="number" id="generalUnsecuredTotal" class="form-control" step="1" value="48500" /></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="trusteeMultiplier">
+                  <span>FLMB Chapter 13 Trustee Multiplier (%)</span>
+                  <span class="badge badge-ust">UST Schedule: 10.0%</span>
+                </label>
+                <input type="number" id="trusteeMultiplier" class="form-control" step="0.1" value="10.0" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="projectedPlanPaymentOverride">
+                  <span>Projected Monthly Plan Payment (Line 36a)</span>
+                </label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <div class="input-prefix-wrap" style="flex:1;"><span class="input-prefix">$</span><input type="number" id="projectedPlanPaymentOverride" class="form-control" step="0.01" placeholder="Auto-calculated" /></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrap" style="margin-top: 16px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Form 122C-2 Part 3 Line</th>
+                    <th>Total Claim / Basis</th>
+                    <th style="text-align:right;">Monthly Deduction (÷ 60)</th>
+                  </tr>
+                </thead>
+                <tbody id="part3SummaryTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 5: PRINTABLE CLIENT & ATTORNEY REPORTS
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-report">
+      <div class="report-toolbar no-print">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <strong>Select Report Format:</strong>
+          <div class="mode-switch">
+            <button type="button" class="mode-btn active" id="btnViewClientReport">Client-Friendly Explanation Report</button>
+            <button type="button" class="mode-btn" id="btnViewAttorneyWorksheet">Official Form 122C-1 / 122C-2 Worksheet</button>
+            <button type="button" class="mode-btn" id="btnViewBothReports">Combined Package (Client + Worksheet)</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button type="button" class="btn btn-primary" id="btnPrintNow">
+            🖨️ Print / Save as PDF
+          </button>
+        </div>
+      </div>
+
+      <div class="printable-sheet" id="printableReportContainer">
+        <!-- Dynamically rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 6: UST / IRS STANDARDS MANAGER
+         ===================================================================== -->
+    <section class="tab-panel" id="panel-standards">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">U.S. Trustee &amp; IRS Standards Table Manager &amp; Automated Updater (FLMB Tampa Division)</div>
+            <div class="card-subtitle">Automatically check/sync from official UST &amp; IRS tables, auto-parse pasted UST data, or edit baseline figures below</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary btn-sm" id="btnAutoFetchOnlineStandards" title="Check justice.gov/ust and IRS endpoints for updated Means Testing tables">
+              🌐 Auto-Update from UST / IRS Online
+            </button>
+            <button type="button" class="btn btn-accent btn-sm" id="btnToggleSmartPasteBox" title="Paste copied text from justice.gov/ust tables to automatically extract and update figures">
+              ⚡ Auto-Parse Pasted UST Table
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btnExportStandardsJson" title="Export active standards database to JSON">
+              Export Standards (.json)
+            </button>
+            <label class="btn btn-outline btn-sm" style="margin:0; cursor:pointer;" title="Import a saved standards JSON file">
+              Import Standards (.json)
+              <input type="file" id="inputImportStandardsJson" accept=".json" style="display:none;" />
+            </label>
+            <button type="button" class="btn btn-outline btn-sm" id="btnRestoreDefaultStandards">
+              Restore Official 2026 Defaults
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Automated Update Status & Smart Paste Drawer -->
+          <div id="autoUpdateStatusBox" class="callout" style="display:none; margin-bottom:16px;"></div>
+
+          <div id="smartPasteDrawer" class="card" style="display:none; background:#f8fafc; border-color:#93c5fd; margin-bottom:18px;">
+            <div class="card-body">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                <div>
+                  <strong style="color:#1e3a8a; font-size:14px;">⚡ Automated UST / IRS Table Text Parser</strong>
+                  <p style="font-size:12px; color:#475569;">
+                    Copy (<code>Ctrl+C</code>) any table from <a href="https://www.justice.gov/ust/means-testing" target="_blank" rel="noopener">justice.gov/ust/means-testing</a> (Florida Median Income, National Standards, Florida Housing &amp; Utilities, or Transportation) and paste below, or click <strong>Read Clipboard &amp; Auto-Update</strong>. The parser automatically extracts the Florida &amp; Tampa Division numbers!
+                  </p>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnReadClipboardAndParse">📋 Read Clipboard &amp; Auto-Update</button>
+                  <button type="button" class="btn btn-accent btn-sm" id="btnParseTextareaStandards">⚡ Parse Text Below &amp; Update</button>
+                </div>
+              </div>
+              <textarea id="smartPasteTextarea" class="form-control mono" rows="4" placeholder="Paste raw text copied from justice.gov/ust/means-testing here (e.g. Florida median income row, Hillsborough/Pinellas/Pasco housing rows, National Standards, or Transportation tables)..."></textarea>
+            </div>
+          </div>
+
+          <div id="standardsManagerBody">
+            <!-- Dynamically rendered by app.js -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="standards.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

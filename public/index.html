@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MDFL Tampa Division — Bankruptcy Petition Program</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
 </head>
 <body>
   <!-- TOP HEADER -->
@@ -23,6 +23,7 @@
       <span class="pill pill-ok" id="hdr-e2e" style="cursor:pointer;" title="Click to test End-to-End AES-256-GCM Encryption with Cloudflare">🔒 E2E: AES-256-GCM</span>
       <span class="pill" id="hdr-engine" style="cursor:pointer;" title="Active PDF Engine (click to configure in Settings)">Engine: Checking...</span>
       <span class="pill pill-ok" id="hdr-compliance">Compliance: Ready</span>
+      <button class="btn btn-secondary btn-sm" id="btn-hdr-browse-cases" title="Browse & search all entered cases and Means Tests">Browse Cases</button>
       <button class="btn btn-secondary btn-sm" id="btn-save-draft">Save Draft</button>
       <button class="btn btn-gold btn-sm" id="btn-quick-generate">Generate Packet</button>
     </div>
@@ -71,13 +72,19 @@
 
         <div class="card">
           <div class="card-header">
-            <h2>Saved Client Folders</h2>
-            <button class="btn btn-secondary btn-sm" id="btn-refresh-cases">Refresh</button>
+            <h2>Saved Client Folders <span class="tag" id="saved-cases-count-tag">0</span></h2>
+            <div class="btn-group">
+              <button class="btn btn-primary btn-sm" id="btn-browse-cases">Browse All Cases&hellip;</button>
+              <button class="btn btn-secondary btn-sm" id="btn-browse-json-file" title="Browse your PC or SynologyDrive for a saved case_data.json or Means Test .json file">Open .json File</button>
+              <input type="file" id="case-json-file-input" accept=".json" class="hidden" />
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-cases">Refresh</button>
+            </div>
           </div>
-          <div class="muted" style="margin-bottom: 10px;">
-            Naming rule: <code>LastName,FirstName</code> &bull; Couple (same last name): <code>LastName,First1 &amp; First2</code> &bull; Different last names: <code>Last1,First1 &amp; Last2,First2</code>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom: 8px;">
+            <input type="text" id="saved-cases-quick-search" placeholder="Quick filter recent clients by name, case #, or county..." style="flex:1;" />
           </div>
-          <div id="saved-cases-list" style="max-height: 225px; overflow-y: auto;"></div>
+          <div id="saved-cases-list" style="max-height: 215px; overflow-y: auto;"></div>
+          <div id="saved-cases-footer" style="margin-top: 8px;"></div>
         </div>
       </div>
 
@@ -606,6 +613,7 @@
             <div class="muted">Tightly linked in real time &mdash; Debtor 1/2 names, county, household size, filing date, income, and debts flow automatically to the Means Test, and every Means Test edit (paystubs, YTD, CMI, IRS standards, Line 45 MDI) automatically updates your Petition Forms (122A-1 / 122A-2 / 122C-1 / 122C-2).</div>
           </div>
           <div class="btn-group">
+            <button class="btn btn-primary btn-sm" id="btn-mt-browse-cases" title="Browse saved cases & Means Test files">Browse Cases / MT&hellip;</button>
             <button class="btn btn-secondary btn-sm" id="btn-push-mt" title="Re-push all Petition fields into Means Test">Re-Sync Petition &rarr; MT</button>
             <button class="btn btn-gold btn-sm" id="btn-pull-mt" title="Force pull latest Means Test results into Petition">Sync MT &rarr; Petition</button>
             <button class="btn btn-secondary btn-sm" id="btn-open-mt-site">Open Full Screen</button>
@@ -919,12 +927,66 @@
     </section>
   </main>
 
+  <!-- BROWSE ALL ENTERED CASES & MEANS TESTS MODAL -->
+  <div id="browse-cases-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="browse-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <h2 id="browse-modal-title">Browse Entered Cases &amp; Means Tests (<span id="modal-cases-total">0</span>)</h2>
+          <div style="font-size:12px; color:#cbd5e1;">Search all client folders in <code>Clients/</code> or open any Petition <code>case_data.json</code> / Means Test <code>.json</code> file from your computer</div>
+        </div>
+        <div class="btn-group">
+          <button type="button" class="btn btn-gold btn-sm" id="btn-modal-browse-json">Browse PC / SynologyDrive (.json)</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-modal-refresh-cases">Refresh</button>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-close-browse-modal">&times; Close</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px;">
+          <input type="text" id="modal-cases-search" placeholder="Search by client name, folder, case number, or county..." style="flex:1; min-width:240px;" />
+          <select id="modal-cases-sort" style="width:200px;">
+            <option value="recent">Sort: Most Recently Updated</option>
+            <option value="az">Sort: Client Name (A &rarr; Z)</option>
+            <option value="za">Sort: Client Name (Z &rarr; A)</option>
+            <option value="chapter">Sort: Chapter (7 / 13)</option>
+          </select>
+        </div>
+        <div class="filter-bar" id="modal-cases-filter-bar" style="margin-bottom:12px;">
+          <button type="button" class="filter-pill active" data-filter="ALL">All Cases</button>
+          <button type="button" class="filter-pill" data-filter="CH7">Chapter 7</button>
+          <button type="button" class="filter-pill" data-filter="CH13">Chapter 13</button>
+          <button type="button" class="filter-pill" data-filter="MT">Has Means Test</button>
+          <button type="button" class="filter-pill" data-filter="PDF">PDF Ready</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Client / Folder</th>
+                <th style="width:120px;">Chapter</th>
+                <th style="width:165px;">Case # / County</th>
+                <th style="width:170px;">Status</th>
+                <th style="width:145px;">Last Updated</th>
+                <th style="width:195px;">Open</th>
+              </tr>
+            </thead>
+            <tbody id="modal-cases-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="muted" id="modal-cases-showing">Showing 0 cases</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-close-browse-modal-foot">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="/exemptions_catalog.js?v=1"></script>
   <script src="/crypto_client.js?v=2"></script>
   <script src="/cf_engine.js?v=5"></script>
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>

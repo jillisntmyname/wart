@@ -22,6 +22,7 @@ const state = {
   formCatalog: [],
   exemptionsCatalog: { schemes: [], by_scheme: {} },
   savedCases: [],
+  browseModalFilter: "ALL",
   updates: null,
   updatesFilter: "ALL",
   manifest: null,
@@ -432,14 +433,25 @@ function _cfLoadSavedCasesMap() {
 
 function _cfListSavedCases() {
   const map = _cfLoadSavedCasesMap();
-  return Object.entries(map).map(([folder, rec]) => ({
-    folder_name: folder,
-    chapter: String(rec.case?.chapter || "7"),
-    is_joint: Boolean(rec.case?.is_joint),
-    debtor_name: rec.debtor_name || folder,
-    updated_at: rec.updated_at || "",
-    has_packet: false,
-  }));
+  return Object.entries(map).map(([folder, rec]) => {
+    const c = rec.case || {};
+    const mt = c.means_test || {};
+    const cmiMo = Number(mt.total_cmi || 0);
+    return {
+      folder_name: folder,
+      chapter: String(c.chapter || "7"),
+      is_joint: Boolean(c.is_joint),
+      debtor_name: rec.debtor_name || folder,
+      case_number: String(c.case_number || ""),
+      county: String(c.debtor1?.county || ""),
+      has_means_test: Boolean(cmiMo > 0 || mt.source === "external_site"),
+      cmi_monthly: cmiMo,
+      updated_at: rec.updated_at || "",
+      updated_ts: rec.updated_ts || 0,
+      revision: Number(c.revision || 0),
+      has_packet: false,
+    };
+  });
 }
 
 async function cfApiAdapter(url, opts = {}) {
@@ -2418,35 +2430,230 @@ function renderMatrixPreview() {
   $("matrix-preview").textContent = mp.text || "(No creditors listed yet)";
 }
 
-/* ==================== SAVED CASES ==================== */
-function renderSavedCases() {
-  const el = $("saved-cases-list");
-  if (!state.savedCases.length) {
-    el.innerHTML = '<div class="muted">No saved client folders yet. Import a CIF or click "Save Draft".</div>';
-    return;
+/* ==================== SAVED CASES & BROWSE MODAL ==================== */
+function _filterCasesList(list, query = "", filter = "ALL", sortMode = "recent") {
+  const q = String(query || "").trim().toLowerCase();
+  let out = (list || []).filter((sc) => {
+    if (filter === "CH7" && String(sc.chapter) !== "7") return false;
+    if (filter === "CH13" && String(sc.chapter) !== "13") return false;
+    if (filter === "MT" && !sc.has_means_test) return false;
+    if (filter === "PDF" && !sc.has_packet) return false;
+    if (q) {
+      const hay = `${sc.folder_name || ""} ${sc.debtor_name || ""} ${sc.case_number || ""} ${sc.county || ""} ch${sc.chapter || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  out = [...out];
+  if (sortMode === "az") {
+    out.sort((a, b) => String(a.folder_name || "").localeCompare(String(b.folder_name || "")));
+  } else if (sortMode === "za") {
+    out.sort((a, b) => String(b.folder_name || "").localeCompare(String(a.folder_name || "")));
+  } else if (sortMode === "chapter") {
+    out.sort((a, b) => Number(a.chapter || 7) - Number(b.chapter || 7) || String(a.folder_name || "").localeCompare(String(b.folder_name || "")));
+  } else {
+    out.sort((a, b) => Number(b.updated_ts || 0) - Number(a.updated_ts || 0));
   }
-  el.innerHTML = state.savedCases
-    .map((sc) => `
-      <div class="saved-case-row">
-        <div>
-          <strong>${esc(sc.folder_name)}</strong>
-          <span class="tag tag-req">Ch. ${esc(sc.chapter)}</span>
-          ${sc.has_packet ? '<span class="tag tag-ok">PDF Ready</span>' : ""}
-          <div class="muted">${esc(sc.debtor_name)} &bull; Updated ${esc(sc.updated_at)}</div>
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="openSavedCase('${esc(sc.folder_name)}')">Open</button>
-      </div>`).join("");
+  return out;
 }
 
-window.openSavedCase = async (folderName) => {
+function renderSavedCases() {
+  const el = $("saved-cases-list");
+  const countTag = $("saved-cases-count-tag");
+  const foot = $("saved-cases-footer");
+  const total = (state.savedCases || []).length;
+  if (countTag) countTag.textContent = String(total);
+
+  if (!total) {
+    el.innerHTML = '<div class="muted">No saved client folders yet. Import a CIF, type Debtor 1\'s name (auto-saves), or click <strong>"Open .json File"</strong>.</div>';
+    if (foot) foot.innerHTML = "";
+    renderBrowseCasesModal();
+    return;
+  }
+
+  const quickQ = $("saved-cases-quick-search")?.value || "";
+  const filtered = _filterCasesList(state.savedCases, quickQ, "ALL", "recent");
+  const previewLimit = 6;
+  const shown = filtered.slice(0, previewLimit);
+
+  el.innerHTML = shown.length
+    ? shown
+      .map((sc) => `
+        <div class="saved-case-row">
+          <div>
+            <strong>${esc(sc.folder_name)}</strong>
+            <span class="tag tag-req">Ch. ${esc(sc.chapter)}${sc.is_joint ? " Jt" : ""}</span>
+            ${sc.has_means_test ? '<span class="tag" style="background:#e0f2fe;color:#0369a1;">Means Test</span>' : ""}
+            ${sc.has_packet ? '<span class="tag tag-ok">PDF Ready</span>' : ""}
+            <div class="muted">${esc(sc.debtor_name)}${sc.case_number ? ` &bull; ${esc(sc.case_number)}` : ""} &bull; Updated ${esc(sc.updated_at)}</div>
+          </div>
+          <div class="btn-group">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openSavedCase('${esc(sc.folder_name)}')">Open</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openSavedCase('${esc(sc.folder_name)}', 'means')" title="Open this case directly in the Means Test tab">MT</button>
+          </div>
+        </div>`).join("")
+    : '<div class="muted">No client folders match that filter.</div>';
+
+  if (foot) {
+    if (filtered.length > previewLimit) {
+      foot.innerHTML = `<button type="button" class="btn btn-secondary btn-sm" style="width:100%;" onclick="openBrowseCasesModal('ALL')">Browse All ${filtered.length} Saved Cases &amp; Means Tests&hellip;</button>`;
+    } else if (total > 0) {
+      foot.innerHTML = `<div class="muted" style="text-align:right;">Showing ${shown.length} of ${total} saved case(s)</div>`;
+    } else {
+      foot.innerHTML = "";
+    }
+  }
+  renderBrowseCasesModal();
+}
+
+function renderBrowseCasesModal() {
+  const tbody = $("modal-cases-tbody");
+  if (!tbody) return;
+  const totalEl = $("modal-cases-total");
+  const showingEl = $("modal-cases-showing");
+  const total = (state.savedCases || []).length;
+  if (totalEl) totalEl.textContent = String(total);
+
+  const q = $("modal-cases-search")?.value || "";
+  const sortMode = $("modal-cases-sort")?.value || "recent";
+  const rows = _filterCasesList(state.savedCases, q, state.browseModalFilter || "ALL", sortMode);
+
+  if (showingEl) {
+    showingEl.textContent = `Showing ${rows.length} of ${total} saved client case(s)`;
+  }
+
+  tbody.innerHTML = rows.length
+    ? rows.map((sc) => `
+      <tr>
+        <td>
+          <strong>${esc(sc.folder_name)}</strong>
+          <div class="muted">${esc(sc.debtor_name)}</div>
+        </td>
+        <td>
+          <span class="tag tag-req">Ch. ${esc(sc.chapter)}${sc.is_joint ? " Joint" : ""}</span>
+        </td>
+        <td>
+          <div>${sc.case_number ? `<code>${esc(sc.case_number)}</code>` : '<span class="muted">—</span>'}</div>
+          <div class="muted">${sc.county ? esc(sc.county) + " County" : ""}</div>
+        </td>
+        <td>
+          ${sc.has_means_test ? `<span class="tag" style="background:#e0f2fe;color:#0369a1;">MT${sc.cmi_monthly ? " (" + money(sc.cmi_monthly) + "/mo)" : ""}</span> ` : ""}
+          ${sc.has_packet ? '<span class="tag tag-ok">PDF Ready</span> ' : ""}
+          ${sc.revision ? `<span class="muted">Rev #${sc.revision}</span>` : ""}
+        </td>
+        <td class="muted">${esc(sc.updated_at || "—")}</td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="openSavedCase('${esc(sc.folder_name)}')">Open Case</button>
+          <button type="button" class="btn btn-gold btn-sm" onclick="openSavedCase('${esc(sc.folder_name)}', 'means')">Means Test</button>
+        </td>
+      </tr>`).join("")
+    : '<tr><td colspan="6" class="muted" style="text-align:center; padding:24px;">No matching cases found. Try clearing filters or click <strong>"Browse PC / SynologyDrive (.json)"</strong> above.</td></tr>';
+}
+
+window.openBrowseCasesModal = async (defaultFilter = "ALL") => {
+  state.browseModalFilter = defaultFilter || "ALL";
+  const bar = $("modal-cases-filter-bar");
+  if (bar) {
+    bar.querySelectorAll(".filter-pill").forEach((b) => {
+      b.classList.toggle("active", b.dataset.filter === state.browseModalFilter);
+    });
+  }
+  const modal = $("browse-cases-modal");
+  if (modal) modal.classList.remove("hidden");
+  renderBrowseCasesModal();
+  if ($("modal-cases-search")) {
+    $("modal-cases-search").focus();
+    $("modal-cases-search").select();
+  }
+  // Background refresh list so newly created coworker cases appear immediately
+  try {
+    const res = await api("/api/cases");
+    state.savedCases = res.saved_cases || state.savedCases;
+    renderSavedCases();
+  } catch (_) {}
+};
+
+function closeBrowseCasesModal() {
+  const modal = $("browse-cases-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+window.openSavedCase = async (folderName, targetTab = null) => {
   try {
     const res = await api(`/api/cases/${encodeURIComponent(folderName)}`);
     applyServerCaseResponse(res);
-    toast(`Opened client folder: ${folderName}`, "ok");
+    closeBrowseCasesModal();
+    if (targetTab) {
+      switchTab(targetTab);
+    }
+    toast(`Opened client folder: ${folderName}${targetTab === "means" ? " (Means Test)" : ""}`, "ok");
   } catch (err) {
     toast(err.message, "err");
   }
 };
+
+async function handleBrowseJsonFile(file) {
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("Selected JSON file is empty or invalid.");
+    }
+
+    // Detect Means Test exported .json vs. Petition case_data.json
+    const isMeansTestJson = Boolean(parsed.earners || parsed.securedAndPriority || parsed.tampaCounty || parsed.standardsPreset);
+    if (isMeansTestJson) {
+      // Load into embedded Means Test calculator AND automatically flow client info + CMI into Petition!
+      localStorage.setItem(FLMB_MT_STORAGE_KEY, JSON.stringify(parsed));
+      const iframe = $("mt-iframe");
+      if (iframe && iframe.contentWindow && _mtIframeReady) {
+        iframe.contentWindow.postMessage({ type: "PETITION_PUSH_TO_MEANS_TEST", payload: parsed, replaceAll: true }, "*");
+        // Trigger immediate pull after Means Test renders the loaded file
+        setTimeout(() => {
+          try {
+            const win = iframe.contentWindow;
+            if (win && typeof win.computeMeansTest === "function") {
+              applyMeansTestSnapshotToPetition(parsed, win.computeMeansTest(), { silent: false });
+            }
+          } catch (_) {}
+        }, 250);
+      } else if (iframe) {
+        const url = $("mt-site-url").value.trim() || state.settings?.means_test_url || "/means-test/index.html";
+        iframe.src = url + (url.includes("?") ? "&" : "?") + "_mtfile=" + Date.now();
+      }
+      closeBrowseCasesModal();
+      switchTab("means");
+      toast(`Loaded Means Test file "${file.name}" and synced to Petition!`, "ok");
+      return;
+    }
+
+    // Otherwise treat as Petition case_data.json
+    const blank = createBlankCase(parsed.chapter || "7");
+    const mergedCase = Object.assign(blank, parsed);
+    mergedCase.debtor1 = Object.assign(blank.debtor1, parsed.debtor1 || {});
+    mergedCase.debtor2 = Object.assign(blank.debtor2, parsed.debtor2 || {});
+    mergedCase.personal_assets = Object.assign(blank.personal_assets, parsed.personal_assets || {});
+    mergedCase.income_debtor1 = Object.assign(blank.income_debtor1, parsed.income_debtor1 || {});
+    mergedCase.income_debtor2 = Object.assign(blank.income_debtor2, parsed.income_debtor2 || {});
+    mergedCase.expenses = Object.assign(blank.expenses, parsed.expenses || {});
+    mergedCase.sofa = Object.assign(blank.sofa, parsed.sofa || {});
+    mergedCase.means_test = Object.assign(blank.means_test, parsed.means_test || {});
+    mergedCase.attorney_fees = Object.assign(blank.attorney_fees, parsed.attorney_fees || {});
+
+    state.caseData = mergedCase;
+    state.baseCaseSnapshot = JSON.parse(JSON.stringify(mergedCase));
+    state.baseRevision = Number(mergedCase.revision || 0);
+    renderAllCaseUI();
+    await recalculate(false);
+    state.activeFolder = state.folderName !== "Unnamed,Client" ? state.folderName : "";
+    pushCaseToMeansTest({ replaceAll: true, silent: true });
+    markDirtyAndScheduleAutoSave();
+    closeBrowseCasesModal();
+    toast(`Opened Petition case from "${file.name}"`, "ok");
+  } catch (err) {
+    toast("Could not open JSON file: " + err.message, "err");
+  }
+}
 
 function applyServerCaseResponse(res) {
   state.caseData = res.case;
@@ -2671,6 +2878,54 @@ function setupStaticHandlers() {
     renderSavedCases();
     toast("Refreshed saved cases");
   });
+
+  // Browse All Entered Cases & Means Tests (Modal + PC/SynologyDrive .json File Picker)
+  if ($("btn-hdr-browse-cases")) $("btn-hdr-browse-cases").addEventListener("click", () => openBrowseCasesModal("ALL"));
+  if ($("btn-browse-cases")) $("btn-browse-cases").addEventListener("click", () => openBrowseCasesModal("ALL"));
+  if ($("btn-mt-browse-cases")) $("btn-mt-browse-cases").addEventListener("click", () => openBrowseCasesModal("MT"));
+  if ($("btn-close-browse-modal")) $("btn-close-browse-modal").addEventListener("click", closeBrowseCasesModal);
+  if ($("btn-close-browse-modal-foot")) $("btn-close-browse-modal-foot").addEventListener("click", closeBrowseCasesModal);
+  if ($("browse-cases-modal")) {
+    $("browse-cases-modal").addEventListener("click", (e) => {
+      if (e.target === $("browse-cases-modal")) closeBrowseCasesModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("browse-cases-modal") && !$("browse-cases-modal").classList.contains("hidden")) {
+      closeBrowseCasesModal();
+    }
+  });
+  if ($("saved-cases-quick-search")) $("saved-cases-quick-search").addEventListener("input", () => renderSavedCases());
+  if ($("modal-cases-search")) $("modal-cases-search").addEventListener("input", () => renderBrowseCasesModal());
+  if ($("modal-cases-sort")) $("modal-cases-sort").addEventListener("change", () => renderBrowseCasesModal());
+  if ($("modal-cases-filter-bar")) {
+    $("modal-cases-filter-bar").addEventListener("click", (e) => {
+      const btn = e.target.closest(".filter-pill");
+      if (!btn) return;
+      $("modal-cases-filter-bar").querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.browseModalFilter = btn.dataset.filter || "ALL";
+      renderBrowseCasesModal();
+    });
+  }
+  if ($("btn-modal-refresh-cases")) {
+    $("btn-modal-refresh-cases").addEventListener("click", async () => {
+      const res = await api("/api/cases");
+      state.savedCases = res.saved_cases || [];
+      renderSavedCases();
+      toast("Refreshed saved cases list", "ok");
+    });
+  }
+  const triggerJsonBrowse = () => $("case-json-file-input")?.click();
+  if ($("btn-browse-json-file")) $("btn-browse-json-file").addEventListener("click", triggerJsonBrowse);
+  if ($("btn-modal-browse-json")) $("btn-modal-browse-json").addEventListener("click", triggerJsonBrowse);
+  if ($("case-json-file-input")) {
+    $("case-json-file-input").addEventListener("change", () => {
+      const f = $("case-json-file-input").files?.[0];
+      if (f) handleBrowseJsonFile(f);
+      $("case-json-file-input").value = "";
+    });
+  }
 
   // Dynamic Add Buttons
   $("btn-add-dep").addEventListener("click", () => {

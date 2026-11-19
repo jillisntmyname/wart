@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MDFL Tampa Division — Bankruptcy Petition Program</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- TOP HEADER -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-seal">MDFL</div>
+      <div>
+        <h1>Bankruptcy Petition Program — Tampa Division</h1>
+        <div class="sub">The Law Offices of Jill McDonald &bull; Middle District of Florida</div>
+      </div>
+    </div>
+    <div class="topbar-meta">
+      <span class="pill pill-gold" id="hdr-folder">Folder: Unnamed,Client</span>
+      <span class="pill" id="hdr-chapter">Chapter 7</span>
+      <span class="pill pill-ok" id="hdr-e2e" style="cursor:pointer;" title="Click to test End-to-End AES-256-GCM Encryption with Cloudflare">🔒 E2E: AES-256-GCM</span>
+      <span class="pill" id="hdr-engine" style="cursor:pointer;" title="Active PDF Engine (click to configure in Settings)">Engine: Checking...</span>
+      <span class="pill pill-ok" id="hdr-compliance">Compliance: Ready</span>
+      <button class="btn btn-secondary btn-sm" id="btn-save-draft">Save Draft</button>
+      <button class="btn btn-gold btn-sm" id="btn-quick-generate">Generate Packet</button>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-tab="import">1. Import &amp; Case</button>
+    <button class="tab-btn" data-tab="assets">2. Assets &amp; Exemptions</button>
+    <button class="tab-btn" data-tab="creditors">3. Creditors <span class="tab-badge" id="badge-creditors">0</span></button>
+    <button class="tab-btn" data-tab="income">4. Income, Expenses &amp; SOFA</button>
+    <button class="tab-btn" data-tab="means">5. Means Test</button>
+    <button class="tab-btn" data-tab="generate">6. Forms &amp; Generate <span class="tab-badge" id="badge-forms">0</span></button>
+    <button class="tab-btn" data-tab="updates">7. Tampa Updates &amp; Templates</button>
+    <button class="tab-btn" data-tab="settings">8. Settings</button>
+  </nav>
+
+  <main class="container">
+    <!-- ==================== TAB 1: IMPORT & CASE ==================== -->
+    <section class="tab-panel active" id="tab-import">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>Import Client Intake Form (CIF)</h2>
+            <div class="btn-group">
+              <a class="btn btn-secondary btn-sm" href="/api/download-intake-form" download="CIF - Updated Bankruptcy Intake Form.pdf" style="text-decoration:none;">Blank Intake PDF</a>
+              <button class="btn btn-secondary btn-sm" id="btn-new-case">New Blank</button>
+              <button class="btn btn-secondary btn-sm" id="btn-sample-ch7">Load Sample Ch. 7</button>
+              <button class="btn btn-secondary btn-sm" id="btn-sample-ch13">Load Sample Joint Ch. 13</button>
+            </div>
+          </div>
+          <div class="field" style="max-width: 240px;">
+            <label for="import-chapter">Filing Chapter for Import</label>
+            <select id="import-chapter">
+              <option value="7">Chapter 7 (Liquidation)</option>
+              <option value="13">Chapter 13 (Wage Earner Plan)</option>
+            </select>
+          </div>
+          <div class="dropzone" id="cif-dropzone">
+            <div class="dz-title">Drop filled-out "CIF - Updated Bankruptcy Intake Form.pdf" here</div>
+            <div class="dz-sub">or legacy "CIF - The ReAwakening.pdf" &bull; Auto-extracts Debtor(s), Assets, Budget, Contracts, DSO, Creditors, Codebtors, SOFA &amp; FL Exemptions</div>
+            <input type="file" id="cif-file-input" accept=".pdf" class="hidden" />
+          </div>
+          <div id="cif-warnings" style="margin-top: 12px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Saved Client Folders</h2>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-cases">Refresh</button>
+          </div>
+          <div class="muted" style="margin-bottom: 10px;">
+            Naming rule: <code>LastName,FirstName</code> &bull; Couple (same last name): <code>LastName,First1 &amp; First2</code> &bull; Different last names: <code>Last1,First1 &amp; Last2,First2</code>
+          </div>
+          <div id="saved-cases-list" style="max-height: 225px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+      <!-- Case Setup -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Case Setup &amp; Filing Options</h2>
+          <label class="check-row"><input type="checkbox" id="f-is-joint" /> Joint Filing (Spouse / Debtor 2)</label>
+        </div>
+        <div class="grid-4">
+          <div class="field">
+            <label for="f-chapter">Bankruptcy Chapter</label>
+            <select id="f-chapter">
+              <option value="7">Chapter 7</option>
+              <option value="13">Chapter 13</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-filing-date">Filing / Signature Date</label>
+            <input type="text" id="f-filing-date" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" />
+          </div>
+          <div class="field">
+            <label for="f-case-number">Case Number (if known / amended)</label>
+            <input type="text" id="f-case-number" placeholder="e.g., 8:26-bk-01234" />
+          </div>
+          <div class="field">
+            <label for="f-fee-method">Filing Fee Payment Method</label>
+            <select id="f-fee-method">
+              <option value="full">Pay in Full</option>
+              <option value="installments">Installments (Form 103A)</option>
+              <option value="waiver">Chapter 7 Fee Waiver (Form 103B)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-household-size">Household Size (Means Test)</label>
+            <input type="number" id="f-household-size" min="1" value="1" />
+          </div>
+          <div class="field">
+            <label for="f-cc-agency">Credit Counseling / Debtor Education Agency</label>
+            <input type="text" id="f-cc-agency" placeholder="Debtorcc.org" />
+          </div>
+          <div class="field">
+            <label for="f-cc-date">Credit Counseling Date</label>
+            <input type="text" id="f-cc-date" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" />
+          </div>
+          <div class="field">
+            <label for="f-cc-fee">Credit Counseling Fee ($)</label>
+            <input type="text" inputmode="decimal" data-format="currency" id="f-cc-fee" />
+          </div>
+        </div>
+        <div class="btn-group" style="margin-top: 8px; gap: 18px;">
+          <label class="check-row"><input type="checkbox" id="f-cc-done" checked /> Credit Counseling Completed (180 days)</label>
+          <label class="check-row"><input type="checkbox" id="f-consumer-debts" checked /> Primarily Consumer Debts</label>
+          <label class="check-row"><input type="checkbox" id="f-rents" /> Rents Residence</label>
+          <label class="check-row"><input type="checkbox" id="f-eviction" /> Eviction Judgment (Form 101A)</label>
+          <label class="check-row"><input type="checkbox" id="f-military" /> Military Service (Form 2020)</label>
+          <label class="check-row"><input type="checkbox" id="f-sole-prop" /> Sole Proprietor</label>
+        </div>
+      </div>
+
+      <!-- Debtor 1 & Debtor 2 -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>Debtor 1 Information</h2>
+            <span class="tag tag-tampa" id="tampa-venue-badge">Tampa Division</span>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>First Name</label><input type="text" id="d1-first" /></div>
+            <div class="field"><label>Middle Name</label><input type="text" id="d1-middle" /></div>
+            <div class="field"><label>Last Name</label><input type="text" id="d1-last" /></div>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>Suffix</label><input type="text" id="d1-suffix" placeholder="Jr., III" /></div>
+            <div class="field"><label>Date of Birth</label><input type="text" id="d1-dob" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" /></div>
+            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d1-ssn" data-format="ssn" maxlength="11" placeholder="XXX-XX-XXXX" /></div>
+          </div>
+          <div class="field"><label>Street Address</label><input type="text" id="d1-street" /></div>
+          <div class="grid-4">
+            <div class="field"><label>City</label><input type="text" id="d1-city" /></div>
+            <div class="field"><label>State</label><input type="text" id="d1-state" value="FL" /></div>
+            <div class="field"><label>ZIP</label><input type="text" id="d1-zip" /></div>
+            <div class="field"><label>County</label><input type="text" id="d1-county" placeholder="Pinellas / Hillsborough" /></div>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>Length at Address</label><input type="text" id="d1-len" placeholder="e.g., 5 years" /></div>
+            <div class="field"><label>Phone</label><input type="text" id="d1-phone" /></div>
+            <div class="field"><label>Email</label><input type="email" id="d1-email" /></div>
+          </div>
+        </div>
+
+        <div class="card" id="card-debtor2">
+          <div class="card-header">
+            <h2>Debtor 2 (Spouse) Information</h2>
+            <span class="muted" id="d2-status-note">Enable "Joint Filing" above for couples</span>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>First Name</label><input type="text" id="d2-first" /></div>
+            <div class="field"><label>Middle Name</label><input type="text" id="d2-middle" /></div>
+            <div class="field"><label>Last Name</label><input type="text" id="d2-last" /></div>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>Suffix</label><input type="text" id="d2-suffix" /></div>
+            <div class="field"><label>Date of Birth</label><input type="text" id="d2-dob" data-format="date" maxlength="10" placeholder="MM/DD/YYYY" /></div>
+            <div class="field"><label>Full SSN (B121 Only — Restricted)</label><input type="text" id="d2-ssn" data-format="ssn" maxlength="11" placeholder="XXX-XX-XXXX" /></div>
+          </div>
+          <div class="field"><label>Street Address (if different)</label><input type="text" id="d2-street" /></div>
+          <div class="grid-4">
+            <div class="field"><label>City</label><input type="text" id="d2-city" /></div>
+            <div class="field"><label>State</label><input type="text" id="d2-state" /></div>
+            <div class="field"><label>ZIP</label><input type="text" id="d2-zip" /></div>
+            <div class="field"><label>County</label><input type="text" id="d2-county" /></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Phone</label><input type="text" id="d2-phone" /></div>
+            <div class="field"><label>Email</label><input type="email" id="d2-email" /></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dependents & Prior Bankruptcies -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3>Dependents (Schedule J — Names Never Printed)</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-add-dep">+ Add Dependent</button>
+          </div>
+          <div id="dependents-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Prior Bankruptcy Filings (Past 8 Years)</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-add-prior-bk">+ Add Prior Case</button>
+          </div>
+          <div id="prior-bk-list"></div>
+        </div>
+      </div>
+
+      <!-- Case Notes (Internal Staff Memos — Never Printed on Court Forms) -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Case Notes &amp; Internal Staff Memos</h2>
+          <span class="tag">Internal Only &mdash; Saved in Client Folder, Never Printed on Forms</span>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="f-case-notes">Attorney / Paralegal Notes (missing documents, trustee follow-ups, special circumstances, client reminders)</label>
+          <textarea id="f-case-notes" style="min-height: 110px;" placeholder="Enter internal case notes here... Automatically saved with this client's case_data.json."></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: ASSETS & EXEMPTIONS ==================== -->
+    <section class="tab-panel" id="tab-assets">
+      <div class="stat-grid" id="assets-stats"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Real Estate (Schedule A/B Part 1)</h2>
+          <div class="btn-group">
+            <button class="btn btn-primary btn-sm" id="btn-add-re-from-d1">+ Add from Debtor 1 Address</button>
+            <button class="btn btn-secondary btn-sm" id="btn-add-re">+ Add Blank Property</button>
+          </div>
+        </div>
+        <div id="real-estate-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Vehicles (Schedule A/B Part 2)</h2>
+          <div class="btn-group">
+            <a class="btn btn-secondary btn-sm" href="https://www.kbb.com/whats-my-car-worth/" target="_blank" rel="noopener">Open KBB.com</a>
+            <button class="btn btn-secondary btn-sm" id="btn-add-veh">+ Add Vehicle</button>
+          </div>
+        </div>
+        <div id="vehicles-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Personal &amp; Financial Property (Schedule A/B Parts 3–7)</h2>
+        </div>
+        <div class="grid-2">
+          <div>
+            <div class="grid-2">
+              <div class="field"><label>Household Goods Description (Line 6)</label><input type="text" id="pa-hh-desc" placeholder="Sofa, beds, tables, appliances..." /></div>
+              <div class="field"><label>Household Goods Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-hh-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Electronics Description (Line 7)</label><input type="text" id="pa-el-desc" placeholder="TVs, laptop, cell phones..." /></div>
+              <div class="field"><label>Electronics Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-el-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Collectibles Description (Line 8)</label><input type="text" id="pa-col-desc" placeholder="Art, coins, stamps, antiques..." /></div>
+              <div class="field"><label>Collectibles Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-col-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Sports &amp; Hobby Equipment (Line 9)</label><input type="text" id="pa-spt-desc" placeholder="Bicycles, golf clubs, gym gear..." /></div>
+              <div class="field"><label>Sports &amp; Hobby Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-spt-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Firearms Description (Line 10)</label><input type="text" id="pa-arm-desc" placeholder="Handguns, rifles, shotguns..." /></div>
+              <div class="field"><label>Firearms Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-arm-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Clothing Description (Line 11)</label><input type="text" id="pa-cl-desc" /></div>
+              <div class="field"><label>Clothing Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-cl-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Jewelry Description (Line 12)</label><input type="text" id="pa-jw-desc" placeholder="Wedding rings, watches..." /></div>
+              <div class="field"><label>Jewelry Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-jw-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Pets / Non-Farm Animals (Line 13)</label><input type="text" id="pa-pet-desc" placeholder="Family dog, cat..." /></div>
+              <div class="field"><label>Pets / Animals Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-pet-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Other Household Items (Line 14)</label><input type="text" id="pa-othhh-desc" placeholder="Lawnmower, patio items..." /></div>
+              <div class="field"><label>Other Household Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-othhh-val" /></div>
+            </div>
+          </div>
+          <div>
+            <div class="field"><label>Cash on Hand (Line 16) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-cash" /></div>
+            <div class="grid-2">
+              <div class="field"><label>Rent Security Deposit Landlord (Line 22)</label><input type="text" id="pa-sec-ll" /></div>
+              <div class="field"><label>Rent Security Deposit ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-sec-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Tax Refund Description (Line 28)</label><input type="text" id="pa-tax-desc" /></div>
+              <div class="field"><label>Tax Refund Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-tax-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Life Insurance Company (Line 31)</label><input type="text" id="pa-life-co" /></div>
+              <div class="field"><label>Life Insurance Cash Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-life-val" /></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Stocks / Bonds / Business / Other Desc.</label><input type="text" id="pa-oth-desc" /></div>
+              <div class="field"><label>Other Financial / Property Value ($)</label><input type="text" inputmode="decimal" data-format="currency" id="pa-oth-val" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 12px;">
+          <div>
+            <div class="card-header">
+              <h3>Bank Accounts (Line 17)</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-add-bank">+ Add Bank Account</button>
+            </div>
+            <div id="bank-accounts-list"></div>
+          </div>
+          <div>
+            <div class="card-header">
+              <h3>Retirement Accounts (Line 21 — 401k / IRA / Pension)</h3>
+              <button class="btn btn-secondary btn-sm" id="btn-add-ret">+ Add Retirement Account</button>
+            </div>
+            <div id="retirement-accounts-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule C Exemptions -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Schedule C: Property Exemptions (Florida, Federal &amp; All 50 States)</h2>
+          <div class="btn-group">
+            <button class="btn btn-gold btn-sm" id="btn-auto-exemptions">Auto-Apply Exemptions</button>
+            <button class="btn btn-primary btn-sm" id="btn-sync-assets-exempt">Sync All Assets &rarr; Schedule C</button>
+            <button class="btn btn-secondary btn-sm" id="btn-add-exemption">+ Add Custom Row</button>
+          </div>
+        </div>
+
+        <div class="grid-2" style="align-items: end; margin-bottom: 12px;">
+          <div class="field" style="margin-bottom:0;">
+            <label for="f-exemption-scheme">Exemption Set / Jurisdiction (Override Florida if 730-Day Rule Applies)</label>
+            <select id="f-exemption-scheme">
+              <option value="FL">Florida (State Opt-Out — Default)</option>
+              <option value="FEDERAL">Federal Bankruptcy Exemptions (11 U.S.C. § 522(d))</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+            <label class="check-row"><input type="checkbox" id="f-override-exempt-caps" /> Allow Statutory Cap Override (Downgrades Cap Errors to Warnings)</label>
+          </div>
+        </div>
+
+        <div id="exempt-cap-meters" class="stat-grid" style="margin-bottom: 12px;"></div>
+
+        <details style="margin-bottom: 14px;">
+          <summary style="cursor:pointer; font-weight:700; color:var(--navy); padding: 6px 0;">
+            Browse All Available Exemptions &amp; Legal Blurbs (<span id="exempt-catalog-count">0</span> Statutes in Selected Set)
+          </summary>
+          <div style="margin-top:8px;">
+            <input type="text" id="exempt-catalog-search" placeholder="Search exemptions (e.g., homestead, wildcard, vehicle, wages, TBE, IRA, EITC)..." style="max-width:440px; margin-bottom:10px;" />
+            <div id="exempt-catalog-cards" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; max-height: 360px; overflow-y: auto; padding-right:4px;"></div>
+          </div>
+        </details>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 70px;">A/B Line</th>
+                <th style="min-width: 170px;">Property Description</th>
+                <th style="width: 110px;">Value ($)</th>
+                <th style="min-width: 220px;">Select Exemption Statute (with Blurb)</th>
+                <th style="width: 115px;">Exempt Amt ($)</th>
+                <th style="width: 65px;">100%?</th>
+                <th style="min-width: 180px;">Statute (Editable Override)</th>
+                <th style="width: 118px;">Stack / Del</th>
+              </tr>
+            </thead>
+            <tbody id="exemptions-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: CREDITORS ==================== -->
+    <section class="tab-panel" id="tab-creditors">
+      <div class="stat-grid" id="creditors-stats"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Import Creditors from CSV or Credit Report PDF</h2>
+          <div class="btn-group">
+            <button class="btn btn-secondary btn-sm" id="btn-import-cred-trigger">Upload CSV / Credit Report PDF</button>
+            <input type="file" id="cred-file-input" accept=".csv,.pdf" class="hidden" />
+          </div>
+        </div>
+        <div class="muted">
+          The CIF form references separate client "Debt Sheets" for unsecured credit cards &amp; medical bills. Upload a CSV export (columns: <code>Creditor, Address, City, State, Zip, Account, Balance, Date, Type</code>) or a Credit Report PDF to append creditors automatically.
+        </div>
+        <div id="cred-import-status" style="margin-top: 8px;"></div>
+      </div>
+
+      <!-- Schedule D -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Secured Creditors (Schedule D — Mortgages, Auto Loans, Liens)</h2>
+          <button class="btn btn-secondary btn-sm" id="btn-add-secured">+ Add Secured Creditor</button>
+        </div>
+        <div id="secured-list"></div>
+      </div>
+
+      <!-- Schedule E/F -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Unsecured Creditors (Schedule E Priority &amp; Schedule F Nonpriority)</h2>
+          <div class="btn-group">
+            <button class="btn btn-secondary btn-sm" id="btn-add-priority">+ Add Priority (Sch. E)</button>
+            <button class="btn btn-primary btn-sm" id="btn-add-nonpriority">+ Add Nonpriority (Sch. F)</button>
+          </div>
+        </div>
+        <div id="unsecured-list"></div>
+      </div>
+
+      <!-- Schedule G & H -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3>Executory Contracts &amp; Leases (Schedule G)</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-add-contract">+ Add Lease / Contract</button>
+          </div>
+          <div id="contracts-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Codebtors (Schedule H)</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-add-codebtor">+ Add Codebtor</button>
+          </div>
+          <div id="codebtors-list"></div>
+        </div>
+      </div>
+
+      <!-- Live MDFL Creditor.txt Preview -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Live MDFL Local Rule 1007-2 <code>Creditor.txt</code> Preview</h2>
+          <span class="tag tag-req" id="matrix-count-tag">0 Creditors</span>
+        </div>
+        <div class="muted" style="margin-bottom: 8px;">
+          Enforces Tampa Division Clerk rules: Single column, left-justified, max <strong>4 lines/block</strong>, max <strong>28 chars/line</strong>, 1 blank line between blocks, excludes Debtor/Attorney/Trustee.
+        </div>
+        <div id="matrix-warnings"></div>
+        <div class="matrix-box" id="matrix-preview">(No creditors listed yet)</div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: INCOME, EXPENSES & SOFA ==================== -->
+    <section class="tab-panel" id="tab-income">
+      <div class="stat-grid" id="budget-stats"></div>
+
+      <!-- Schedule I -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>Schedule I — Debtor 1 Income</h2>
+            <label class="check-row"><input type="checkbox" id="i1-employed" /> Employed</label>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Occupation</label><input type="text" id="i1-occ" /></div>
+            <div class="field"><label>Employer Name</label><input type="text" id="i1-emp" /></div>
+            <div class="field"><label>How Long Employed</label><input type="text" id="i1-long" /></div>
+            <div class="field"><label>Pay Frequency</label><input type="text" id="i1-freq" placeholder="Biweekly / Monthly" /></div>
+            <div class="field"><label>Monthly Gross Wages ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-gross" /></div>
+            <div class="field"><label>Monthly Overtime ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ot" /></div>
+            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-tax" /></div>
+            <div class="field"><label>Insurance Deduction ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ins" /></div>
+            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ret" /></div>
+            <div class="field"><label>Other Deductions (Union/DSO/Etc.) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-othded" /></div>
+            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ss" /></div>
+            <div class="field"><label>Pension / Retirement Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-pen" /></div>
+            <div class="field"><label>Net Business / Rental Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-biz" /></div>
+            <div class="field"><label>Other Monthly Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-other" /></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Schedule I — Debtor 2 / Spouse Income</h2>
+            <label class="check-row"><input type="checkbox" id="i2-employed" /> Employed</label>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Occupation</label><input type="text" id="i2-occ" /></div>
+            <div class="field"><label>Employer Name</label><input type="text" id="i2-emp" /></div>
+            <div class="field"><label>How Long Employed</label><input type="text" id="i2-long" /></div>
+            <div class="field"><label>Pay Frequency</label><input type="text" id="i2-freq" /></div>
+            <div class="field"><label>Monthly Gross Wages ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-gross" /></div>
+            <div class="field"><label>Monthly Overtime ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ot" /></div>
+            <div class="field"><label>Taxes &amp; Social Security Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-tax" /></div>
+            <div class="field"><label>Insurance Deduction ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ins" /></div>
+            <div class="field"><label>Mandatory / Voluntary Ret. Ded. ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ret" /></div>
+            <div class="field"><label>Other Deductions ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-othded" /></div>
+            <div class="field"><label>Social Security Income (Monthly) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ss" /></div>
+            <div class="field"><label>Pension / Retirement Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-pen" /></div>
+            <div class="field"><label>Household Contributions (Line 11) ($)</label><input type="text" inputmode="decimal" data-format="currency" id="f-hh-contrib" /></div>
+            <div class="field"><label>Household Contrib. Description</label><input type="text" id="f-hh-contrib-desc" /></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule J -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Schedule J — Monthly Household Expenses</h2>
+          <label class="check-row"><input type="checkbox" id="e-sep-hh" /> Debtor 2 Maintains Separate Household (Selects Form 106J-2)</label>
+        </div>
+        <div class="grid-4">
+          <div class="field"><label>Rent / Home Mortgage (L4)</label><input type="text" inputmode="decimal" data-format="currency" id="e-rent" /></div>
+          <div class="field"><label>Real Estate Taxes (L4a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-retax" /></div>
+          <div class="field"><label>Home Insurance (L4b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-homeins" /></div>
+          <div class="field"><label>Home Maintenance (L4c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-maint" /></div>
+          <div class="field"><label>HOA / Condo Dues (L4d)</label><input type="text" inputmode="decimal" data-format="currency" id="e-hoa" /></div>
+          <div class="field"><label>Electricity / Heat / Gas (L6a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-elec" /></div>
+          <div class="field"><label>Water / Sewer / Garbage (L6b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-water" /></div>
+          <div class="field"><label>Phone / Cell / Internet / Cable (L6c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-phone" /></div>
+          <div class="field"><label>Food &amp; Housekeeping (L7)</label><input type="text" inputmode="decimal" data-format="currency" id="e-food" /></div>
+          <div class="field"><label>Childcare &amp; Education (L8)</label><input type="text" inputmode="decimal" data-format="currency" id="e-child" /></div>
+          <div class="field"><label>Clothing &amp; Laundry (L9)</label><input type="text" inputmode="decimal" data-format="currency" id="e-cloth" /></div>
+          <div class="field"><label>Personal Care (L10)</label><input type="text" inputmode="decimal" data-format="currency" id="e-pcare" /></div>
+          <div class="field"><label>Medical &amp; Dental (L11)</label><input type="text" inputmode="decimal" data-format="currency" id="e-med" /></div>
+          <div class="field"><label>Transportation / Gas (L12)</label><input type="text" inputmode="decimal" data-format="currency" id="e-trans" /></div>
+          <div class="field"><label>Entertainment &amp; Recreation (L13)</label><input type="text" inputmode="decimal" data-format="currency" id="e-ent" /></div>
+          <div class="field"><label>Charitable Contributions (L14)</label><input type="text" inputmode="decimal" data-format="currency" id="e-char" /></div>
+          <div class="field"><label>Life Insurance (L15a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-life" /></div>
+          <div class="field"><label>Health Insurance (L15b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-health" /></div>
+          <div class="field"><label>Vehicle Insurance (L15c)</label><input type="text" inputmode="decimal" data-format="currency" id="e-vehins" /></div>
+          <div class="field"><label>Vehicle Payment 1 (L17a)</label><input type="text" inputmode="decimal" data-format="currency" id="e-car1" /></div>
+          <div class="field"><label>Vehicle Payment 2 (L17b)</label><input type="text" inputmode="decimal" data-format="currency" id="e-car2" /></div>
+          <div class="field"><label>Alimony / Child Support (L18)</label><input type="text" inputmode="decimal" data-format="currency" id="e-alimony" /></div>
+          <div class="field"><label>Other Expense Desc. (L21)</label><input type="text" id="e-othdesc" /></div>
+          <div class="field"><label>Other Monthly Expense (L21)</label><input type="text" inputmode="decimal" data-format="currency" id="e-oth" /></div>
+        </div>
+      </div>
+
+      <!-- SOFA & B2030 -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>SOFA (Form 107) — Income History &amp; Key Disclosures</h2>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Marital Status (Q1)</label>
+              <select id="sofa-marital">
+                <option value="Not married">Not married</option>
+                <option value="Married">Married</option>
+              </select>
+            </div>
+            <div class="field"><label>Debtor 1 YTD Gross Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ytd" /></div>
+            <div class="field"><label>Debtor 1 Last Year Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-ly" /></div>
+            <div class="field"><label>Debtor 1 Two Years Ago Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i1-2y" /></div>
+            <div class="field"><label>Debtor 2 YTD Gross Income ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ytd" /></div>
+            <div class="field"><label>Debtor 2 Last Year Gross ($)</label><input type="text" inputmode="decimal" data-format="currency" id="i2-ly" /></div>
+          </div>
+          <div class="muted" style="margin-top: 6px;">
+            Prior addresses (<span id="sofa-pa-count">0</span>), lawsuits (<span id="sofa-law-count">0</span>), repossessions/garnishments (<span id="sofa-repo-count">0</span>), and closed accounts (<span id="sofa-closed-count">0</span>) parsed from the CIF are automatically carried into Form 107.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Attorney Compensation Disclosure (Form B2030)</h2>
+            <button class="btn btn-secondary btn-sm" id="btn-reset-b2030">Apply Chapter Defaults</button>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Agreed Legal Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-agreed" /></div>
+            <div class="field"><label>Received Prior to Filing ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-received" /></div>
+            <div class="field"><label>Court Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-filing" /></div>
+            <div class="field"><label>Credit Report Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="fee-cr" /></div>
+          </div>
+          <div class="field"><label>Additional Included / Fee Notes</label><textarea id="fee-inc-other"></textarea></div>
+          <div class="field"><label>Excluded Services (Item 7)</label><textarea id="fee-excluded"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 5: MEANS TEST ==================== -->
+    <section class="tab-panel" id="tab-means">
+      <div class="stat-grid" id="means-stats"></div>
+
+      <!-- Native Sync Bar for flmb-ch13-means-test -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Integrated FLMB Tampa Division Means Test Calculator <span class="tag tag-ok" id="mt-live-sync-pill" style="margin-left:8px;">&#128260; Live Two-Way Auto-Sync Active</span></h2>
+            <div class="muted">Tightly linked in real time &mdash; Debtor 1/2 names, county, household size, filing date, income, and debts flow automatically to the Means Test, and every Means Test edit (paystubs, YTD, CMI, IRS standards, Line 45 MDI) automatically updates your Petition Forms (122A-1 / 122A-2 / 122C-1 / 122C-2).</div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-secondary btn-sm" id="btn-push-mt" title="Re-push all Petition fields into Means Test">Re-Sync Petition &rarr; MT</button>
+            <button class="btn btn-gold btn-sm" id="btn-pull-mt" title="Force pull latest Means Test results into Petition">Sync MT &rarr; Petition</button>
+            <button class="btn btn-secondary btn-sm" id="btn-open-mt-site">Open Full Screen</button>
+          </div>
+        </div>
+        <div id="mt-sync-status"></div>
+        <div id="mt-embed-wrap" style="margin-top: 10px;">
+          <iframe id="mt-iframe" src="/means-test/index.html" style="width: 100%; height: 740px; border: 1px solid var(--border); border-radius: 9px; background: #fff;"></iframe>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>Petition Means Test Values (Forms 122A-1 / 122C-1)</h2>
+            <span class="tag" id="mt-source-badge">Calculated from Schedule I</span>
+          </div>
+          <div class="alert alert-info">
+            Per 11 U.S.C. &sect; 101(10A), Social Security benefits are automatically excluded from Current Monthly Income (CMI). Mid-2026 Florida UST Median Income standards are synced with <code>flmb-ch13-means-test/standards.js</code>.
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Calculation Source</label>
+              <select id="mt-source">
+                <option value="calculated">Auto-Calculate from Schedule I Income</option>
+                <option value="external_site">Use Synced FLMB Means Test Site Results</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Marital Adjustment Deduction (Monthly $)</label>
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-marital-adj" />
+            </div>
+            <div class="field">
+              <label>6-Month Monthly CMI (122A-1 / 122C-1) ($)</label>
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-total-cmi" />
+            </div>
+            <div class="field">
+              <label>Ch. 13 Monthly Disposable Income (122C-2 L45) ($)</label>
+              <input type="text" inputmode="decimal" data-format="currency" id="mt-disposable" />
+            </div>
+          </div>
+          <div class="btn-group" style="margin-top: 6px; gap: 18px;">
+            <label class="check-row"><input type="checkbox" id="mt-exempt" /> Exempt from Ch. 7 Means Test (Non-Consumer / Military — Selects 122A-1Supp)</label>
+          </div>
+          <div class="field" style="margin-top: 10px;">
+            <label>Means Test Notes / Audit Reference</label>
+            <textarea id="mt-notes" placeholder="Auto-populated when you pull results from the Means Test Calculator..."></textarea>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Means Test URL &amp; Manual JSON Bridge</h2>
+          </div>
+          <div class="field">
+            <label>Means Test Site URL (Default: Local Mounted <code>/means-test/index.html</code>)</label>
+            <div class="btn-group" style="flex-wrap: nowrap;">
+              <input type="text" id="mt-site-url" placeholder="/means-test/index.html" />
+              <button class="btn btn-secondary btn-sm" id="btn-save-mt-url">Save URL</button>
+            </div>
+          </div>
+          <div class="btn-group" style="margin: 10px 0;">
+            <button class="btn btn-secondary btn-sm" id="btn-export-mt-json">Copy Case Income JSON</button>
+            <button class="btn btn-secondary btn-sm" id="btn-reload-mt-iframe">Reload Embedded Calculator</button>
+          </div>
+          <div class="field">
+            <label>Manual JSON Override (Optional)</label>
+            <textarea id="mt-import-json" placeholder='{"total_cmi": 5200.00, "marital_adjustment": 0, "monthly_disposable_income": 250.00}'></textarea>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-apply-mt-json">Apply Manual JSON</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 6: FORMS & GENERATE ==================== -->
+    <section class="tab-panel" id="tab-generate">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>MDFL Tampa Division Compliance Checklist</h2>
+            <button class="btn btn-secondary btn-sm" id="btn-recheck-compliance">Re-Run Checks</button>
+          </div>
+          <div id="compliance-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Generate Petition Packet</h2>
+          </div>
+          <div class="alert alert-info">
+            Saves directly into: <strong id="gen-folder-preview">Clients/Unnamed,Client</strong><br/>
+            Includes: Editable <code>Individual_Forms/*.pdf</code>, flattened &amp; <strong>bookmarked</strong> <code>Petition_Packet_Ch*.pdf</code> (excludes B121), separate <code>Form_B121_RESTRICTED_SSN.pdf</code>, and MDFL LR 1007-2 <code>Creditor.txt</code>.
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label class="check-row"><input type="checkbox" id="opt-download-zip" /> Also download a <code>.zip</code> copy to this browser (optional &mdash; files are already saved directly in the client folder)</label>
+          </div>
+          <div class="btn-group" style="margin-bottom: 16px;">
+            <button class="btn btn-gold btn-lg" id="btn-generate-main">Generate Complete Petition Packet</button>
+            <button class="btn btn-secondary" id="btn-save-only">Save Draft Only</button>
+          </div>
+          <div id="generate-result"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Selected Official Bankruptcy Forms (<span id="forms-chapter-lbl">Chapter 7</span>)</h2>
+          <button class="btn btn-secondary btn-sm" id="btn-reset-forms">Reset to Auto-Selected Forms</button>
+        </div>
+        <div class="form-check-grid" id="forms-checklist"></div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 7: TAMPA UPDATES & TEMPLATES ==================== -->
+    <section class="tab-panel" id="tab-updates">
+      <div class="card" id="tampa-summary-card">
+        <div class="card-header">
+          <h2>Middle District of Florida — Tampa Division Key Rules &amp; Dates</h2>
+          <button class="btn btn-primary btn-sm" id="btn-refresh-updates">Refresh Live Court Updates</button>
+        </div>
+        <div class="stat-grid" id="tampa-court-stats"></div>
+        <div class="alert alert-warn" id="tampa-upcoming-banner"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>MDFL Court Announcements</h2>
+          <span class="muted" id="updates-fetched-at"></span>
+        </div>
+        <div class="filter-bar" id="updates-filter-bar">
+          <button class="filter-pill active" data-filter="ALL">All</button>
+          <button class="filter-pill" data-filter="Tampa Division">Tampa Division</button>
+          <button class="filter-pill" data-filter="Forms">Forms</button>
+          <button class="filter-pill" data-filter="Fees">Fees</button>
+          <button class="filter-pill" data-filter="Chapter 7">Chapter 7</button>
+          <button class="filter-pill" data-filter="Chapter 13">Chapter 13</button>
+          <button class="filter-pill" data-filter="Rules/Orders">Rules / Orders</button>
+        </div>
+        <div id="announcements-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>U.S. Trustee Florida Median Family Income Auto-Updater</h2>
+          <div class="btn-group">
+            <button class="btn btn-secondary btn-sm" id="btn-check-median">Check UST Florida Median Income</button>
+            <button class="btn btn-gold btn-sm" id="btn-apply-median">Apply Official UST Update</button>
+          </div>
+        </div>
+        <div class="muted" style="margin-bottom: 8px;">
+          Checks <a href="https://www.justice.gov/ust/means-testing" target="_blank" rel="noopener">justice.gov/ust/means-testing</a> (updated twice yearly by the U.S. Trustee — typically Spring &amp; Fall) and keeps your Florida Median Family Income table current.
+        </div>
+        <div id="median-update-status"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Official Templates Auto-Updater (<code>Templates/</code>)</h2>
+          <div class="btn-group">
+            <button class="btn btn-secondary btn-sm" id="btn-check-forms">Check Official Forms for Updates</button>
+            <button class="btn btn-gold btn-sm" id="btn-sync-forms">Download &amp; Update Changed Templates</button>
+          </div>
+        </div>
+        <div class="muted" style="margin-bottom: 10px;">
+          Compares your local <code>Templates/</code> PDFs against official <code>uscourts.gov</code> &amp; <code>flmb.uscourts.gov</code> sources. Previous versions are automatically archived to <code>Templates/_archive/</code> before replacing.
+        </div>
+        <div id="templates-status-banner"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Template File</th>
+                <th>Status</th>
+                <th>Local Size</th>
+                <th>Remote Size</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="templates-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 8: SETTINGS ==================== -->
+    <section class="tab-panel" id="tab-settings">
+      <!-- SHARED WINDOWS PYTHON PDF SERVER CONNECTION -->
+      <div class="card" style="border-left: 4px solid var(--gold);">
+        <div class="card-header">
+          <div>
+            <h2>Shared Windows Python PDF Server Connection (Encrypted Relay)</h2>
+            <div class="muted">Connect Cloudflare to ONE shared office Windows PC running the full PyMuPDF + ReportLab engine (Arial 9 pt, full 22-page CIF parsing, flattened packets, and shared SynologyDrive client folders). Multiple staff can use the same Python server simultaneously.</div>
+          </div>
+          <span class="tag tag-req" id="py-conn-badge">Checking Mode...</span>
+        </div>
+
+        <div id="py-conn-status" style="margin-bottom: 12px;"></div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="set-py-url">Python Server Cloudflare Tunnel URL (Overrides firm secret for this browser)</label>
+            <input type="url" id="set-py-url" placeholder="https://petition-api.yourdomain.com or https://xxxx.trycloudflare.com" />
+          </div>
+          <div class="field">
+            <label for="set-py-secret">Relay Secret (<code>X-Relay-Secret</code> printed by Windows Server Launcher)</label>
+            <input type="text" id="set-py-secret" placeholder="Paste Relay Secret from Start Shared Petition Server window" />
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-bottom: 14px;">
+          <button class="btn btn-primary" id="btn-save-py-conn">Save Connection</button>
+          <button class="btn btn-gold" id="btn-test-py-conn">Test Encrypted Connection (PC &rarr; Cloudflare &rarr; Python)</button>
+          <button class="btn btn-secondary" id="btn-clear-py-conn">Clear Browser Override</button>
+        </div>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:700; color:var(--navy); padding: 6px 0;">
+            Windows PC Server Setup Guide (One Shared Office PC for All Staff)
+          </summary>
+          <div style="margin-top: 10px; padding: 14px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; line-height: 1.55;">
+            <p style="margin-top:0;"><strong>Do we need one Python server per person?</strong><br/>
+            <strong>No!</strong> Run <strong>ONE shared Python server</strong> on a single always-on office Windows PC. FastAPI handles multiple concurrent staff requests cleanly and uses per-client folder locks so two users can work at the same time without conflicts. All generated packets are automatically saved to the shared <code>Clients\LastName,FirstName\</code> folder on the office PC (syncing via SynologyDrive) <em>and</em> returned encrypted as a downloadable <code>.zip</code> to whichever staff member clicked Generate.</p>
+
+            <p><strong>Automated One-Click Setup on the Host Windows PC:</strong></p>
+            <ol style="margin: 6px 0 12px 18px; padding: 0;">
+              <li>Install <strong>Python 3.12+</strong> from <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a> (check <em>"Add python.exe to PATH"</em>).</li>
+              <li>Double-click <code>Start Shared Petition Server (Cloudflare Tunnel).bat</code> in your <code>Wart</code> folder.</li>
+              <li>The script automatically:
+                <ul>
+                  <li>Installs any missing Python PDF libraries (<code>pymupdf</code>, <code>reportlab</code>, <code>fastapi</code>, <code>uvicorn</code>)</li>
+                  <li>Generates &amp; displays your private <strong>Relay Secret</strong> (saved in <code>petition_app\data\settings.json</code>)</li>
+                  <li>Starts the multi-user Python server on <code>http://127.0.0.1:8765</code></li>
+                  <li>Downloads <code>cloudflared.exe</code> automatically and opens an encrypted HTTPS tunnel</li>
+                </ul>
+              </li>
+              <li><strong>One-Time Cloudflare Setup for Zero-Domain Auto-Registration (Recommended):</strong>
+                <ul>
+                  <li>Your <code>wrangler.toml</code> already binds KV Namespace <code>PETITION_CONFIG</code> automatically on deploy!</li>
+                  <li>In your <strong>Worker &rarr; Settings &rarr; Variables and Secrets</strong>, add encrypted secrets <code>PETITION_ENCRYPTION_KEY</code> (your firm E2E passphrase) and <code>PYTHON_RELAY_SECRET</code> (printed by the Windows launcher).</li>
+                  <li>On first launch, enter your Cloudflare Worker URL when prompted (saved to <code>petition_app\data\cloudflare_worker_url.txt</code>). From then on, every time the office PC restarts, the launcher <strong>automatically registers the new Quick Tunnel URL in Cloudflare KV</strong> &mdash; all staff connect automatically with zero copy-paste!</li>
+                </ul>
+              </li>
+              <li><strong>Optional (Windows Auto-Start on Boot):</strong> Press <code>Win + R</code>, type <code>shell:startup</code>, and drop a shortcut to <code>Start Shared Petition Server (Cloudflare Tunnel).bat</code> in that folder.</li>
+            </ol>
+          </div>
+        </details>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>Attorney &amp; Law Firm Settings</h2>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Attorney Full Name</label><input type="text" id="set-att-name" /></div>
+            <div class="field"><label>Electronic Signature</label><input type="text" id="set-att-sig" /></div>
+            <div class="field"><label>Law Firm Name</label><input type="text" id="set-att-firm" /></div>
+            <div class="field"><label>Florida Bar Number</label><input type="text" id="set-att-bar" /></div>
+            <div class="field"><label>Street Address</label><input type="text" id="set-att-street" /></div>
+            <div class="field"><label>City</label><input type="text" id="set-att-city" /></div>
+            <div class="field"><label>State</label><input type="text" id="set-att-state" /></div>
+            <div class="field"><label>ZIP Code</label><input type="text" id="set-att-zip" /></div>
+            <div class="field"><label>Phone</label><input type="text" id="set-att-phone" /></div>
+            <div class="field"><label>Attorney Email</label><input type="email" id="set-att-email" /></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Paths, Means Test URL &amp; Thresholds</h2>
+          </div>
+          <div class="field"><label>Clients Output Folder</label><input type="text" id="set-clients-dir" /></div>
+          <div class="field"><label>Means Test Site URL</label><input type="url" id="set-mt-url" placeholder="http://localhost:..." /></div>
+          <div class="grid-3">
+            <div class="field"><label>Ch. 7 Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fee-ch7" /></div>
+            <div class="field"><label>Ch. 13 Filing Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fee-ch13" /></div>
+            <div class="field"><label>Ch. 13 Debt Limit ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-ch13-limit" /></div>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>FL Vehicle Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-veh" /></div>
+            <div class="field"><label>FL Personal Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-pers" /></div>
+            <div class="field"><label>FL Wildcard Cap ($/debtor)</label><input type="text" inputmode="decimal" data-format="currency" id="set-fl-wild" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><h2>Florida Median Family Income (US Trustee)</h2></div>
+          <div class="grid-3">
+            <div class="field"><label>1 Person ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-1" /></div>
+            <div class="field"><label>2 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-2" /></div>
+            <div class="field"><label>3 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-3" /></div>
+            <div class="field"><label>4 Persons ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-4" /></div>
+            <div class="field"><label>Each Additional ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-med-add" /></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2>B2030 Chapter Fee Defaults</h2></div>
+          <div class="grid-2">
+            <div class="field"><label>Ch. 7 Agreed Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b7-agreed" /></div>
+            <div class="field"><label>Ch. 7 Prior Received ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b7-rec" /></div>
+            <div class="field"><label>Ch. 13 Agreed Fee ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b13-agreed" /></div>
+            <div class="field"><label>Ch. 13 Prior Received ($)</label><input type="text" inputmode="decimal" data-format="currency" id="set-b13-rec" /></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg" id="btn-save-settings">Save All Settings</button>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="/exemptions_catalog.js?v=1"></script>
+  <script src="/crypto_client.js?v=2"></script>
+  <script src="/cf_engine.js?v=4"></script>
+  <script src="/app.js?v=8"></script>
+</body>
+</html>

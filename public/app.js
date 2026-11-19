@@ -4,6 +4,7 @@
 const state = {
   settings: null,
   formCatalog: [],
+  exemptionsCatalog: { schemes: [], by_scheme: {} },
   savedCases: [],
   updates: null,
   updatesFilter: "ALL",
@@ -111,6 +112,8 @@ function createBlankCase(chapter = "7") {
       other_property_desc: "", other_property_val: 0,
     },
     exemptions: [],
+    exemption_scheme: "FL",
+    override_exemption_caps: false,
     secured_creditors: [],
     unsecured_creditors: [],
     executory_contracts: [],
@@ -162,6 +165,7 @@ function createBlankCase(chapter = "7") {
       excluded_services: bdef.excluded_services ?? "",
     },
     selected_forms: [],
+    case_notes: "",
     cif_source_filename: "",
     cif_raw_warnings: [],
   };
@@ -286,6 +290,22 @@ async function cfApiAdapter(url, opts = {}) {
   const settings = _cfLoadSettings();
 
   if (url.startsWith("/api/updates")) {
+    if (url.includes("check-median-income")) {
+      const apply = url.includes("apply=true");
+      if (_cfUsePythonRelay()) {
+        return window.PetitionCrypto.securePost("check-median-income", _cfWrapBackendMeta({ apply }));
+      }
+      return {
+        checked_at: new Date().toLocaleString(),
+        source_url: "https://www.justice.gov/ust/means-testing",
+        current: settings.fl_median_income,
+        official: null,
+        changed: false,
+        applied: false,
+        status: "manual_check",
+        note: "Connect your Shared Office Python Server to auto-fetch live US Trustee tables, or verify at justice.gov/ust/means-testing.",
+      };
+    }
     if (url.includes("check-forms") || url.includes("sync-forms")) {
       if (_cfUsePythonRelay()) {
         const sub = url.includes("sync-forms") ? "sync-forms" : "check-forms";
@@ -336,6 +356,7 @@ async function cfApiAdapter(url, opts = {}) {
     return {
       settings,
       form_catalog: eng.FORM_CATALOG,
+      exemptions_catalog: window.EXEMPTIONS_CATALOG || { schemes: [], by_scheme: {} },
       saved_cases: savedCases,
       updates,
       manifest: { last_checked: new Date().toISOString().slice(0, 19), files: filesMap },
@@ -408,12 +429,13 @@ async function cfApiAdapter(url, opts = {}) {
     return { source: "csv", secured: res.secured, unsecured: res.unsecured, count: res.secured.length + res.unsecured.length };
   }
 
-  if (url === "/api/generate") {
+  if (url.startsWith("/api/generate")) {
     const c = JSON.parse(opts.body || "{}");
+    const wantZip = url.includes("return_zip=true");
     if (_cfUsePythonRelay()) {
-      const pyRes = await window.PetitionCrypto.securePost("generate", _cfWrapBackendMeta({ case_data: c }));
-      // Convert returned encrypted zip_base64 into an instant browser download!
-      if (pyRes.zip_base64) {
+      const pyRes = await window.PetitionCrypto.securePost("generate", _cfWrapBackendMeta({ case_data: c, include_zip: wantZip }));
+      // Only download ZIP if the user explicitly checked the optional ZIP checkbox!
+      if (wantZip && pyRes.zip_base64) {
         const zipBytes = window.PetitionCrypto.b64Decode(pyRes.zip_base64);
         const zipBlob = new Blob([zipBytes], { type: "application/zip" });
         pyRes.zip_url = URL.createObjectURL(zipBlob);
@@ -541,10 +563,12 @@ async function init() {
     const boot = await api("/api/bootstrap");
     state.settings = boot.settings;
     state.formCatalog = boot.form_catalog || [];
+    state.exemptionsCatalog = boot.exemptions_catalog || { schemes: [], by_scheme: {} };
     state.savedCases = boot.saved_cases || [];
     state.updates = boot.updates;
     state.manifest = boot.manifest;
     state.caseData = createBlankCase("7");
+    populateExemptionSchemesDropdown();
     populateSettingsUI();
     renderSavedCases();
     renderUpdates();
@@ -591,6 +615,7 @@ function populateScalarsFromCase() {
   $("f-eviction").checked = !!c.has_eviction_judgment;
   $("f-military").checked = !!c.military_service;
   $("f-sole-prop").checked = !!c.sole_proprietor;
+  if ($("f-case-notes")) $("f-case-notes").value = c.case_notes || "";
 
   const d1 = c.debtor1 || {};
   $("d1-first").value = d1.first_name || "";
@@ -630,11 +655,20 @@ function populateScalarsFromCase() {
   $("pa-hh-val").value = pa.household_goods_val || 0;
   $("pa-el-desc").value = pa.electronics_desc || "";
   $("pa-el-val").value = pa.electronics_val || 0;
+  $("pa-col-desc").value = pa.collectibles_desc || "";
+  $("pa-col-val").value = pa.collectibles_val || 0;
+  $("pa-spt-desc").value = pa.sports_hobby_desc || "";
+  $("pa-spt-val").value = pa.sports_hobby_val || 0;
+  $("pa-arm-desc").value = pa.firearms_desc || "";
+  $("pa-arm-val").value = pa.firearms_val || 0;
   $("pa-cl-desc").value = pa.clothes_desc || "";
   $("pa-cl-val").value = pa.clothes_val || 0;
   $("pa-jw-desc").value = pa.jewelry_desc || "";
   $("pa-jw-val").value = pa.jewelry_val || 0;
-  $("pa-misc-val").value = (pa.collectibles_val || 0) + (pa.sports_hobby_val || 0) + (pa.firearms_val || 0) + (pa.animals_val || 0) + (pa.other_household_val || 0);
+  $("pa-pet-desc").value = pa.animals_desc || "";
+  $("pa-pet-val").value = pa.animals_val || 0;
+  $("pa-othhh-desc").value = pa.other_household_desc || "";
+  $("pa-othhh-val").value = pa.other_household_val || 0;
   $("pa-cash").value = pa.cash_on_hand || 0;
   $("pa-sec-ll").value = pa.security_deposit_landlord || "";
   $("pa-sec-val").value = pa.security_deposit_rent_val || 0;
@@ -644,6 +678,9 @@ function populateScalarsFromCase() {
   $("pa-life-val").value = pa.life_insurance_cash_val || 0;
   $("pa-oth-desc").value = pa.other_property_desc || pa.other_financial_desc || "";
   $("pa-oth-val").value = (pa.other_property_val || 0) + (pa.other_financial_val || 0);
+
+  if ($("f-exemption-scheme")) $("f-exemption-scheme").value = (c.exemption_scheme || "FL").toUpperCase();
+  if ($("f-override-exempt-caps")) $("f-override-exempt-caps").checked = !!c.override_exemption_caps;
 
   const i1 = c.income_debtor1 || {};
   $("i1-employed").checked = !!i1.employed;
@@ -752,6 +789,7 @@ function syncScalarsToCase() {
   c.has_eviction_judgment = $("f-eviction").checked;
   c.military_service = $("f-military").checked;
   c.sole_proprietor = $("f-sole-prop").checked;
+  if ($("f-case-notes")) c.case_notes = $("f-case-notes").value;
 
   const d1 = c.debtor1;
   d1.first_name = $("d1-first").value.trim();
@@ -797,12 +835,20 @@ function syncScalarsToCase() {
   pa.household_goods_val = num($("pa-hh-val").value);
   pa.electronics_desc = $("pa-el-desc").value.trim();
   pa.electronics_val = num($("pa-el-val").value);
+  pa.collectibles_desc = $("pa-col-desc").value.trim();
+  pa.collectibles_val = num($("pa-col-val").value);
+  pa.sports_hobby_desc = $("pa-spt-desc").value.trim();
+  pa.sports_hobby_val = num($("pa-spt-val").value);
+  pa.firearms_desc = $("pa-arm-desc").value.trim();
+  pa.firearms_val = num($("pa-arm-val").value);
   pa.clothes_desc = $("pa-cl-desc").value.trim();
   pa.clothes_val = num($("pa-cl-val").value);
   pa.jewelry_desc = $("pa-jw-desc").value.trim();
   pa.jewelry_val = num($("pa-jw-val").value);
-  pa.other_household_val = num($("pa-misc-val").value);
-  pa.collectibles_val = 0; pa.sports_hobby_val = 0; pa.firearms_val = 0; pa.animals_val = 0;
+  pa.animals_desc = $("pa-pet-desc").value.trim();
+  pa.animals_val = num($("pa-pet-val").value);
+  pa.other_household_desc = $("pa-othhh-desc").value.trim();
+  pa.other_household_val = num($("pa-othhh-val").value);
   pa.cash_on_hand = num($("pa-cash").value);
   pa.security_deposit_landlord = $("pa-sec-ll").value.trim();
   pa.security_deposit_rent_val = num($("pa-sec-val").value);
@@ -813,6 +859,25 @@ function syncScalarsToCase() {
   pa.other_property_desc = $("pa-oth-desc").value.trim();
   pa.other_property_val = num($("pa-oth-val").value);
   pa.other_financial_val = 0;
+
+  if ($("f-exemption-scheme")) c.exemption_scheme = $("f-exemption-scheme").value || "FL";
+  if ($("f-override-exempt-caps")) c.override_exemption_caps = $("f-override-exempt-caps").checked;
+
+  // Keep any Real Estate linked to Debtor 1's address automatically synchronized
+  let syncedAnyRe = false;
+  (c.real_estate || []).forEach((r) => {
+    if (r.use_debtor_address) {
+      if (r.address !== d1.street || r.city !== d1.city || r.state !== d1.state || r.zip_code !== d1.zip_code || r.county !== d1.county) {
+        r.address = d1.street;
+        r.city = d1.city;
+        r.state = d1.state || "FL";
+        r.zip_code = d1.zip_code;
+        r.county = d1.county;
+        syncedAnyRe = true;
+      }
+    }
+  });
+  if (syncedAnyRe) renderRealEstate();
 
   const i1 = c.income_debtor1;
   i1.employed = $("i1-employed").checked;
@@ -1058,21 +1123,103 @@ function renderPriorBankruptcies() {
     : '<div class="muted">No prior bankruptcy filings in the past 8 years.</div>';
 }
 
+const COUNTY_APPRAISER_LINKS = {
+  pinellas:     { label: "Look Up on PCPAO.gov",        url: "https://www.pcpao.gov/quick-search", source: "Pinellas County Property Appraiser (PCPAO.gov)" },
+  hillsborough: { label: "Look Up on HCPAFL.org",       url: "https://gis.hcpafl.org/propertysearch/", source: "Hillsborough County Property Appraiser (HCPAFL.org)" },
+  pasco:        { label: "Look Up on PascoPA.com",      url: "https://search.pascopa.com/", source: "Pasco County Property Appraiser (PascoPA.com)" },
+  manatee:      { label: "Look Up on ManateePAO.gov",   url: "https://www.manateepao.gov/search/", source: "Manatee County Property Appraiser (ManateePAO.gov)" },
+  sarasota:     { label: "Look Up on SC-PA.com",        url: "https://www.sc-pa.com/propertysearch", source: "Sarasota County Property Appraiser (SC-PA.com)" },
+  polk:         { label: "Look Up on PolkPA.org",       url: "https://www.polkpa.org/CamaDisplay.aspx", source: "Polk County Property Appraiser (PolkPA.org)" },
+  hernando:     { label: "Look Up on HernandoPA",       url: "https://www.hernandopa-fl.us/propertysearch/", source: "Hernando County Property Appraiser" },
+  hardee:       { label: "Look Up on Hardee PA",        url: "https://www.qpublic.net/fl/hardee/search.html", source: "Hardee County Property Appraiser" },
+};
+
+function getPropertyAppraiserInfo(countyRaw) {
+  const key = String(countyRaw || "").toLowerCase().replace(/\s*county\s*/g, "").trim();
+  if (COUNTY_APPRAISER_LINKS[key]) return COUNTY_APPRAISER_LINKS[key];
+  // Default to Pinellas County PCPAO.gov per Tampa Division / firm practice
+  return COUNTY_APPRAISER_LINKS.pinellas;
+}
+
+window.toggleRealEstateUseDebtorAddr = (idx, checked) => {
+  const r = state.caseData.real_estate[idx];
+  if (!r) return;
+  r.use_debtor_address = !!checked;
+  if (checked) {
+    syncScalarsToCase();
+    const d1 = state.caseData.debtor1 || {};
+    r.address = d1.street || "";
+    r.city = d1.city || "";
+    r.state = d1.state || "FL";
+    r.zip_code = d1.zip_code || "";
+    r.county = d1.county || "";
+    if (!r.value_source || r.value_source === "County Property Appraiser Just/Market Value") {
+      r.value_source = getPropertyAppraiserInfo(r.county).source;
+    }
+    toast("Pulled Debtor 1's address into Property #" + (idx + 1), "ok");
+  }
+  renderRealEstate();
+  scheduleRecalc(false);
+};
+
+window.lookupPropertyAppraiser = (idx) => {
+  const r = state.caseData.real_estate[idx];
+  if (!r) return;
+  const info = getPropertyAppraiserInfo(r.county || state.caseData.debtor1?.county);
+  const street = (r.address || "").trim();
+  if (street && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(street).then(
+      () => toast(`Copied "${street}" to clipboard — paste into ${info.label.replace("Look Up on ", "")}!`, "ok"),
+      () => {}
+    );
+  }
+  window.open(info.url, "_blank", "noopener");
+};
+
+function buildKbbUrl(v) {
+  const slug = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const yr = String(v.year || "").replace(/\D/g, "");
+  const mk = slug(v.make);
+  const md = slug(v.model);
+  if (yr.length === 4 && mk && md) {
+    return `https://www.kbb.com/${mk}/${md}/${yr}/`;
+  }
+  return "https://www.kbb.com/whats-my-car-worth/";
+}
+
 function renderRealEstate() {
   const arr = state.caseData.real_estate || [];
   $("real-estate-list").innerHTML = arr.length
-    ? arr.map((r, i) => `
+    ? arr.map((r, i) => {
+      const paInfo = getPropertyAppraiserInfo(r.county || state.caseData.debtor1?.county);
+      const locked = r.use_debtor_address ? 'readonly style="background:#f1f5f9;"' : "";
+      return `
       <div class="subcard">
-        <div class="subcard-head">
-          <strong>Property #${i + 1} ${r.is_primary_residence ? "(Primary Homestead)" : ""}</strong>
-          <button class="btn btn-danger btn-sm" onclick="removeArr('real_estate',${i})">Remove</button>
+        <div class="subcard-head" style="flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <strong>Property #${i + 1} ${r.is_primary_residence ? "(Primary Homestead)" : ""}</strong>
+            <label class="check-row" style="font-size:12px; color:var(--navy); font-weight:600;">
+              <input type="checkbox" ${r.use_debtor_address ? "checked" : ""} onchange="toggleRealEstateUseDebtorAddr(${i}, this.checked)" />
+              Use Debtor 1's Address Automatically
+            </label>
+          </div>
+          <div class="btn-group">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="lookupPropertyAppraiser(${i})" title="Copies street address to clipboard and opens Property Appraiser search">${esc(paInfo.label)} &nearr;</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeArr('real_estate',${i})">Remove</button>
+          </div>
         </div>
         <div class="grid-4">
-          <div class="field"><label>Street Address</label><input type="text" value="${esc(r.address)}" onchange="updateArr('real_estate',${i},'address',this.value)"/></div>
-          <div class="field"><label>City</label><input type="text" value="${esc(r.city)}" onchange="updateArr('real_estate',${i},'city',this.value)"/></div>
-          <div class="field"><label>State / ZIP</label><input type="text" value="${esc(r.zip_code)}" onchange="updateArr('real_estate',${i},'zip_code',this.value)"/></div>
-          <div class="field"><label>County</label><input type="text" value="${esc(r.county)}" onchange="updateArr('real_estate',${i},'county',this.value)"/></div>
-          <div class="field"><label>Market Value ($)</label><input type="number" step="0.01" value="${r.market_value || 0}" onchange="updateArrNum('real_estate',${i},'market_value',this.value);updateArrNum('real_estate',${i},'portion_owned_value',this.value)"/></div>
+          <div class="field"><label>Street Address</label><input type="text" ${locked} value="${esc(r.address)}" onchange="updateArr('real_estate',${i},'address',this.value)"/></div>
+          <div class="field"><label>City</label><input type="text" ${locked} value="${esc(r.city)}" onchange="updateArr('real_estate',${i},'city',this.value)"/></div>
+          <div class="field"><label>State / ZIP</label><input type="text" ${locked} value="${esc(r.zip_code)}" onchange="updateArr('real_estate',${i},'zip_code',this.value)"/></div>
+          <div class="field"><label>County</label><input type="text" ${locked} value="${esc(r.county)}" onchange="updateArr('real_estate',${i},'county',this.value);renderRealEstate();"/></div>
+          <div class="field">
+            <label style="display:flex; justify-content:space-between; align-items:center;">
+              <span>Market Value ($)</span>
+              <a href="${esc(paInfo.url)}" target="_blank" rel="noopener" onclick="lookupPropertyAppraiser(${i});return false;" style="font-size:11px; color:var(--navy); text-decoration:underline;">PCPAO / PA &nearr;</a>
+            </label>
+            <input type="number" step="0.01" value="${r.market_value || 0}" onchange="updateArrNum('real_estate',${i},'market_value',this.value);updateArrNum('real_estate',${i},'portion_owned_value',this.value)"/>
+          </div>
           <div class="field"><label>Value Source</label><input type="text" value="${esc(r.value_source)}" onchange="updateArr('real_estate',${i},'value_source',this.value)"/></div>
           <div class="field"><label>Intent</label>
             <select onchange="updateArr('real_estate',${i},'intent',this.value)">
@@ -1081,28 +1228,40 @@ function renderRealEstate() {
             </select>
           </div>
           <div class="field" style="justify-content:center;">
-            <label class="check-row"><input type="checkbox" ${r.is_primary_residence ? "checked" : ""} onchange="updateArr('real_estate',${i},'is_primary_residence',this.checked)"/> Primary Residence</label>
+            <label class="check-row"><input type="checkbox" ${r.is_primary_residence ? "checked" : ""} onchange="updateArr('real_estate',${i},'is_primary_residence',this.checked);renderRealEstate();"/> Primary Residence</label>
           </div>
         </div>
-      </div>`).join("")
-    : '<div class="muted">No real estate listed.</div>';
+      </div>`;
+    }).join("")
+    : '<div class="muted">No real estate listed. Click <strong>"+ Add from Debtor 1 Address"</strong> to pull the debtor\'s home automatically.</div>';
 }
 
 function renderVehicles() {
   const arr = state.caseData.vehicles || [];
   $("vehicles-list").innerHTML = arr.length
-    ? arr.map((v, i) => `
+    ? arr.map((v, i) => {
+      const kbbUrl = buildKbbUrl(v);
+      return `
       <div class="subcard">
-        <div class="subcard-head">
+        <div class="subcard-head" style="flex-wrap:wrap; gap:8px;">
           <strong>Vehicle #${i + 1}: ${esc(`${v.year} ${v.make} ${v.model}`.trim() || "New Vehicle")}</strong>
-          <button class="btn btn-danger btn-sm" onclick="removeArr('vehicles',${i})">Remove</button>
+          <div class="btn-group">
+            <a class="btn btn-secondary btn-sm" href="${esc(kbbUrl)}" target="_blank" rel="noopener" title="Look up private-party/trade-in value on Kelley Blue Book">Look Up on KBB.com &nearr;</a>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeArr('vehicles',${i})">Remove</button>
+          </div>
         </div>
         <div class="grid-4">
-          <div class="field"><label>Year</label><input type="text" value="${esc(v.year)}" onchange="updateArr('vehicles',${i},'year',this.value)"/></div>
-          <div class="field"><label>Make</label><input type="text" value="${esc(v.make)}" onchange="updateArr('vehicles',${i},'make',this.value)"/></div>
-          <div class="field"><label>Model</label><input type="text" value="${esc(v.model)}" onchange="updateArr('vehicles',${i},'model',this.value)"/></div>
+          <div class="field"><label>Year</label><input type="text" value="${esc(v.year)}" onchange="updateArr('vehicles',${i},'year',this.value);renderVehicles();"/></div>
+          <div class="field"><label>Make</label><input type="text" value="${esc(v.make)}" onchange="updateArr('vehicles',${i},'make',this.value);renderVehicles();"/></div>
+          <div class="field"><label>Model</label><input type="text" value="${esc(v.model)}" onchange="updateArr('vehicles',${i},'model',this.value);renderVehicles();"/></div>
           <div class="field"><label>Mileage</label><input type="text" value="${esc(v.mileage)}" onchange="updateArr('vehicles',${i},'mileage',this.value)"/></div>
-          <div class="field"><label>Market Value ($)</label><input type="number" step="0.01" value="${v.market_value || 0}" onchange="updateArrNum('vehicles',${i},'market_value',this.value);updateArrNum('vehicles',${i},'portion_owned_value',this.value)"/></div>
+          <div class="field">
+            <label style="display:flex; justify-content:space-between; align-items:center;">
+              <span>Market Value ($)</span>
+              <a href="${esc(kbbUrl)}" target="_blank" rel="noopener" style="font-size:11px; color:var(--navy); text-decoration:underline;">KBB.com &nearr;</a>
+            </label>
+            <input type="number" step="0.01" value="${v.market_value || 0}" onchange="updateArrNum('vehicles',${i},'market_value',this.value);updateArrNum('vehicles',${i},'portion_owned_value',this.value)"/>
+          </div>
           <div class="field"><label>Loan Payoff ($)</label><input type="number" step="0.01" value="${v.payoff || 0}" onchange="updateArrNum('vehicles',${i},'payoff',this.value)"/></div>
           <div class="field"><label>Intent (Ch. 7 / 13)</label>
             <select onchange="updateArr('vehicles',${i},'intent',this.value)">
@@ -1111,7 +1270,8 @@ function renderVehicles() {
           </div>
           <div class="field"><label>Value Source</label><input type="text" value="${esc(v.value_source)}" onchange="updateArr('vehicles',${i},'value_source',this.value)"/></div>
         </div>
-      </div>`).join("")
+      </div>`;
+    }).join("")
     : '<div class="muted">No vehicles listed.</div>';
 }
 
@@ -1149,20 +1309,326 @@ function renderRetirementAccounts() {
     : '<div class="muted">No retirement accounts listed.</div>';
 }
 
+function populateExemptionSchemesDropdown() {
+  const sel = $("f-exemption-scheme");
+  if (!sel) return;
+  const schemes = state.exemptionsCatalog?.schemes || [];
+  if (!schemes.length) return;
+  const cur = (state.caseData?.exemption_scheme || sel.value || "FL").toUpperCase();
+  sel.innerHTML = schemes
+    .map((s) => `<option value="${esc(s.code)}">${esc(s.name)}</option>`)
+    .join("");
+  sel.value = schemes.some((s) => s.code === cur) ? cur : "FL";
+}
+
+function getActiveSchemeCode() {
+  return ((state.caseData && state.caseData.exemption_scheme) || "FL").toUpperCase();
+}
+
+function getActiveSchemeExemptions() {
+  const code = getActiveSchemeCode();
+  const byScheme = state.exemptionsCatalog?.by_scheme || {};
+  return byScheme[code] || byScheme.FL || [];
+}
+
+function formatExemptionCapBadge(item, isJoint) {
+  if (!item) return "";
+  if (item.unlimited) return "100% / Unlimited";
+  const lim = isJoint ? (item.limit_joint ?? item.limit_single) : item.limit_single;
+  if (lim === null || lim === undefined) return "State Statutory Cap";
+  return `${money(lim)}${isJoint ? " (Joint)" : " (Single)"}`;
+}
+
+function findExemptionCatalogEntry(ex) {
+  const active = getActiveSchemeExemptions();
+  const byScheme = state.exemptionsCatalog?.by_scheme || {};
+  const allFallback = [...active, ...(byScheme.FL || []), ...(byScheme.FEDERAL || [])];
+  if (ex.exemption_id) {
+    const exact = allFallback.find((item) => item.id === ex.exemption_id);
+    if (exact) return exact;
+  }
+  const st = String(ex.statute || "").toLowerCase().trim();
+  if (!st) return null;
+  // Exact or substring match against statute text
+  const byStatute = active.find((item) => {
+    const is = item.statute.toLowerCase();
+    return st === is || st.includes(is) || is.includes(st);
+  });
+  if (byStatute) return byStatute;
+  // Helpful FL / Federal keyword fallbacks for legacy/imported rows
+  if (st.includes("222.25(4)")) return allFallback.find((x) => x.id === "fl_wildcard") || null;
+  if (st.includes("222.25(1)")) return allFallback.find((x) => x.id === "fl_vehicle") || null;
+  if (st.includes("4(a)(1)") || st.includes("222.01")) return allFallback.find((x) => x.id === "fl_homestead") || null;
+  if (st.includes("4(a)(2)")) return allFallback.find((x) => x.id === "fl_personal") || null;
+  if (st.includes("222.21")) return allFallback.find((x) => x.id === "fl_retirement") || null;
+  if (st.includes("222.14")) return allFallback.find((x) => x.id === "fl_life_annuity") || null;
+  if (st.includes("222.11")) return allFallback.find((x) => x.id === "fl_wages_hoh") || null;
+  if (st.includes("222.25(3)")) return allFallback.find((x) => x.id === "fl_eitc") || null;
+  if (st.includes("522(d)(1)")) return allFallback.find((x) => x.id === "fed_homestead") || null;
+  if (st.includes("522(d)(2)")) return allFallback.find((x) => x.id === "fed_vehicle") || null;
+  if (st.includes("522(d)(3)")) return allFallback.find((x) => x.id === "fed_household") || null;
+  if (st.includes("522(d)(4)")) return allFallback.find((x) => x.id === "fed_jewelry") || null;
+  if (st.includes("522(d)(5)")) return allFallback.find((x) => x.id === "fed_wildcard") || null;
+  if (st.includes("522(d)(12)")) return allFallback.find((x) => x.id === "fed_retirement") || null;
+  return null;
+}
+
+function renderExemptionCapMeters() {
+  const el = $("exempt-cap-meters");
+  if (!el) return;
+  const c = state.caseData;
+  const scheme = getActiveSchemeCode();
+  const mult = c.is_joint ? 2 : 1;
+  const exs = c.exemptions || [];
+  const totalExempt = exs.reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+
+  if (scheme === "FL") {
+    const th = state.settings?.thresholds || {};
+    const vehCap = Number(th.fl_vehicle_exemption || 5000) * mult;
+    const persCap = Number(th.fl_personal_property_exemption || 1000) * mult;
+    const wildCap = Number(th.fl_wildcard_exemption || 4000) * mult;
+    const hasHome = exs.some((x) => x.exemption_id === "fl_homestead" || /4\(a\)\(1\)|222\.01|homestead/i.test(x.statute || ""));
+    const vehUsed = exs.filter((x) => x.exemption_id === "fl_vehicle" || /222\.25\(1\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const persUsed = exs.filter((x) => x.exemption_id === "fl_personal" || /4\(a\)\(2\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const wildUsed = exs.filter((x) => x.exemption_id === "fl_wildcard" || /222\.25\(4\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const effWildCap = hasHome ? 0 : wildCap;
+
+    el.innerHTML = `
+      <div class="stat-card"><div class="stat-label">FL Homestead (Art. X § 4(a)(1))</div><div class="stat-val" style="font-size:16px;">${hasHome ? "Claimed (Unlimited)" : "Not Claimed"}</div><div class="stat-sub">${hasHome ? "Wildcard (§ 222.25(4)) unavailable" : "Wildcard ($" + wildCap.toLocaleString() + ") unlocked!"}</div></div>
+      <div class="stat-card" style="${vehUsed > vehCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">FL Vehicle (§ 222.25(1))</div><div class="stat-val" style="font-size:16px;${vehUsed > vehCap ? "color:#dc2626;" : ""}">${money(vehUsed)} / ${money(vehCap)}</div><div class="stat-sub">${money(Math.max(0, vehCap - vehUsed))} remaining</div></div>
+      <div class="stat-card" style="${persUsed > persCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">FL Personal Prop (§ 4(a)(2))</div><div class="stat-val" style="font-size:16px;${persUsed > persCap ? "color:#dc2626;" : ""}">${money(persUsed)} / ${money(persCap)}</div><div class="stat-sub">${money(Math.max(0, persCap - persUsed))} remaining</div></div>
+      <div class="stat-card" style="${wildUsed > effWildCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">FL Wildcard (§ 222.25(4))</div><div class="stat-val" style="font-size:16px;${wildUsed > effWildCap ? "color:#dc2626;" : ""}">${money(wildUsed)} / ${money(effWildCap)}</div><div class="stat-sub">Total Schedule C: ${money(totalExempt)}</div></div>
+    `;
+  } else if (scheme === "FEDERAL") {
+    const homeCap = 31575 * mult;
+    const vehCap = 5025 * mult;
+    const hhCap = 16850 * mult;
+    const homeUsed = exs.filter((x) => x.exemption_id === "fed_homestead" || /522\(d\)\(1\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const vehUsed = exs.filter((x) => x.exemption_id === "fed_vehicle" || /522\(d\)\(2\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const hhUsed = exs.filter((x) => x.exemption_id === "fed_household" || /522\(d\)\(3\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const wildUsed = exs.filter((x) => x.exemption_id === "fed_wildcard" || /522\(d\)\(5\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
+    const wildCap = (1675 * mult) + Math.min(Math.max(0, homeCap - homeUsed), 15800 * mult);
+
+    el.innerHTML = `
+      <div class="stat-card" style="${homeUsed > homeCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">Fed. Homestead (§ 522(d)(1))</div><div class="stat-val" style="font-size:16px;">${money(homeUsed)} / ${money(homeCap)}</div><div class="stat-sub">Apr. 1, 2025 adjusted cap</div></div>
+      <div class="stat-card" style="${vehUsed > vehCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">Fed. Vehicle (§ 522(d)(2))</div><div class="stat-val" style="font-size:16px;">${money(vehUsed)} / ${money(vehCap)}</div><div class="stat-sub">${money(Math.max(0, vehCap - vehUsed))} remaining</div></div>
+      <div class="stat-card" style="${hhUsed > hhCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">Fed. Household (§ 522(d)(3))</div><div class="stat-val" style="font-size:16px;">${money(hhUsed)} / ${money(hhCap)}</div><div class="stat-sub">${money(Math.max(0, hhCap - hhUsed))} remaining</div></div>
+      <div class="stat-card" style="${wildUsed > wildCap ? "border-color:#dc2626;" : ""}"><div class="stat-label">Fed. Wildcard (§ 522(d)(5))</div><div class="stat-val" style="font-size:16px;">${money(wildUsed)} / ${money(wildCap)}</div><div class="stat-sub">Total Schedule C: ${money(totalExempt)}</div></div>
+    `;
+  } else {
+    const schObj = (state.exemptionsCatalog?.schemes || []).find((s) => s.code === scheme);
+    el.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Active Exemption Override</div><div class="stat-val" style="font-size:16px;">${esc(schObj?.name || scheme)}</div><div class="stat-sub">730-Day Domicile Override (11 U.S.C. § 522(b)(3)(A))</div></div>
+      <div class="stat-card"><div class="stat-label">Total Schedule C Claimed</div><div class="stat-val" style="font-size:16px;">${money(totalExempt)}</div><div class="stat-sub">${exs.length} exemption row(s) listed</div></div>
+    `;
+  }
+}
+
+function renderExemptionCatalogDirectory() {
+  const cardsEl = $("exempt-catalog-cards");
+  const countEl = $("exempt-catalog-count");
+  if (!cardsEl) return;
+  const items = getActiveSchemeExemptions();
+  const q = ($("exempt-catalog-search")?.value || "").trim().toLowerCase();
+  const filtered = q
+    ? items.filter((it) => `${it.title} ${it.statute} ${it.category} ${it.blurb}`.toLowerCase().includes(q))
+    : items;
+  if (countEl) countEl.textContent = String(items.length);
+  const isJoint = !!state.caseData?.is_joint;
+
+  cardsEl.innerHTML = filtered.length
+    ? filtered.map((it) => `
+      <div style="border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:var(--surface-alt); display:flex; flex-direction:column; justify-content:space-between; gap:6px;">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px;">
+            <span class="tag" style="font-size:10px;">${esc(it.category)}</span>
+            <span class="tag tag-ok" style="font-size:10px;">${esc(formatExemptionCapBadge(it, isJoint))}</span>
+          </div>
+          <div style="font-weight:700; color:var(--navy); font-size:13px;">${esc(it.title)}</div>
+          <div style="font-size:11px; color:#475569; font-family:monospace; margin:2px 0 5px;">${esc(it.statute)}</div>
+          <div style="font-size:12px; color:#334155; line-height:1.4;">${esc(it.blurb)}</div>
+        </div>
+        <div style="text-align:right; margin-top:4px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addExemptionFromCatalog('${esc(it.id)}')">+ Add to Schedule C</button>
+        </div>
+      </div>`).join("")
+    : '<div class="muted">No exemptions match that search filter.</div>';
+}
+
+window.addExemptionFromCatalog = (exId) => {
+  const items = getActiveSchemeExemptions();
+  const it = items.find((x) => x.id === exId);
+  if (!it) return;
+  const isJoint = !!state.caseData?.is_joint;
+  const cap = isJoint ? (it.limit_joint ?? it.limit_single) : it.limit_single;
+  state.caseData.exemptions.push({
+    schedule_ab_line: "",
+    description: it.category || it.title,
+    current_value: 0,
+    exemption_amount: cap || 0,
+    claim_100_percent: !!it.unlimited,
+    statute: it.statute,
+    exemption_id: it.id,
+    override_amount: false,
+  });
+  renderExemptions();
+  scheduleRecalc(false);
+  toast(`Added "${it.title}" to Schedule C`, "ok");
+};
+
+window.applyExemptionChoice = (idx, exemptionId) => {
+  const ex = state.caseData.exemptions[idx];
+  if (!ex) return;
+  if (!exemptionId || exemptionId === "__custom__") {
+    ex.exemption_id = "";
+    ex.override_amount = true;
+    renderExemptions();
+    scheduleRecalc(false);
+    return;
+  }
+  const items = getActiveSchemeExemptions();
+  const it = items.find((x) => x.id === exemptionId);
+  if (!it) return;
+  ex.exemption_id = it.id;
+  ex.statute = it.statute;
+  const isJoint = !!state.caseData?.is_joint;
+  const cap = isJoint ? (it.limit_joint ?? it.limit_single) : it.limit_single;
+  if (it.unlimited) {
+    ex.claim_100_percent = true;
+    if (Number(ex.current_value || 0) > 0) ex.exemption_amount = Number(ex.current_value);
+  } else {
+    ex.claim_100_percent = false;
+    const val = Number(ex.current_value || 0);
+    if (val > 0 && cap !== null && cap !== undefined) {
+      ex.exemption_amount = Math.min(val, cap);
+    } else if (val > 0) {
+      ex.exemption_amount = val;
+    }
+  }
+  renderExemptions();
+  scheduleRecalc(false);
+};
+
+window.updateExemptionAmt = (idx, rawVal) => {
+  const ex = state.caseData.exemptions[idx];
+  if (!ex) return;
+  ex.exemption_amount = num(rawVal);
+  ex.override_amount = true;
+  renderExemptionCapMeters();
+  scheduleRecalc(false);
+};
+
+function syncAllAssetsToExemptions() {
+  syncScalarsToCase();
+  const c = state.caseData;
+  const pa = c.personal_assets || {};
+  const existingLines = new Set((c.exemptions || []).map((x) => String(x.schedule_ab_line || "").trim()));
+  const candidates = [];
+
+  (c.real_estate || []).forEach((r, i) => {
+    const val = Number(r.portion_owned_value || r.market_value || 0);
+    if (val > 0) {
+      const addr = [r.address, r.city, `${r.state || ""} ${r.zip_code || ""}`.trim()].filter(Boolean).join(", ") || `Property #${i + 1}`;
+      candidates.push([`1.${i + 1}`, addr, val]);
+    }
+  });
+  (c.vehicles || []).forEach((v, i) => {
+    const val = Number(v.portion_owned_value || v.market_value || 0);
+    if (val > 0) {
+      candidates.push([`3.${i + 1}`, `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim() || `Vehicle #${i + 1}`, val]);
+    }
+  });
+
+  const flatPersonal = [
+    ["6", pa.household_goods_desc || "Household Goods", pa.household_goods_val],
+    ["7", pa.electronics_desc || "Electronics", pa.electronics_val],
+    ["8", pa.collectibles_desc || "Collectibles", pa.collectibles_val],
+    ["9", pa.sports_hobby_desc || "Sports & Hobby Equipment", pa.sports_hobby_val],
+    ["10", pa.firearms_desc || "Firearms", pa.firearms_val],
+    ["11", pa.clothes_desc || "Clothing", pa.clothes_val],
+    ["12", pa.jewelry_desc || "Jewelry", pa.jewelry_val],
+    ["13", pa.animals_desc || "Pets / Animals", pa.animals_val],
+    ["14", pa.other_household_desc || "Other Household Items", pa.other_household_val],
+    ["16", "Cash on Hand", pa.cash_on_hand],
+    ["22", pa.security_deposit_landlord ? `Security Deposit: ${pa.security_deposit_landlord}` : "Security Deposit", pa.security_deposit_rent_val],
+    ["28", pa.tax_refund_desc || "Tax Refund", pa.tax_refund_val],
+    ["31", pa.life_insurance_company ? `Life Insurance: ${pa.life_insurance_company}` : "Life Insurance Cash Value", pa.life_insurance_cash_val],
+    ["53", pa.other_property_desc || "Other Property / Financial Assets", pa.other_property_val],
+  ];
+  flatPersonal.forEach(([ln, desc, val]) => {
+    if (Number(val || 0) > 0) candidates.push([ln, desc, Number(val)]);
+  });
+  (pa.bank_accounts || []).forEach((b, i) => {
+    if (Number(b.balance || 0) > 0) candidates.push([`17.${i + 1}`, `${b.account_type || "Account"}: ${b.institution || ""}`.trim(), Number(b.balance)]);
+  });
+  (pa.retirement_accounts || []).forEach((r, i) => {
+    if (Number(r.balance || 0) > 0) candidates.push([`21.${i + 1}`, `${r.account_type || "Retirement"}: ${r.institution || ""}`.trim(), Number(r.balance)]);
+  });
+
+  let added = 0;
+  for (const [ln, desc, val] of candidates) {
+    if (existingLines.has(ln)) continue;
+    c.exemptions.push({
+      schedule_ab_line: ln,
+      description: desc,
+      current_value: val,
+      exemption_amount: 0,
+      claim_100_percent: false,
+      statute: "",
+      exemption_id: "",
+      override_amount: false,
+    });
+    existingLines.add(ln);
+    added += 1;
+  }
+  renderExemptions();
+  scheduleRecalc(false);
+  toast(added ? `Synced ${added} asset(s) to Schedule C — pick an exemption from each row's dropdown.` : "All scheduled assets are already listed on Schedule C.", added ? "ok" : "");
+}
+
 function renderExemptions() {
+  renderExemptionCapMeters();
+  renderExemptionCatalogDirectory();
   const arr = state.caseData.exemptions || [];
+  const catalog = getActiveSchemeExemptions();
+  const isJoint = !!state.caseData?.is_joint;
+
   $("exemptions-tbody").innerHTML = arr.length
-    ? arr.map((ex, i) => `
+    ? arr.map((ex, i) => {
+      const matched = findExemptionCatalogEntry(ex);
+      const selectedId = matched ? matched.id : "__custom__";
+      const opts = [
+        `<option value="__custom__" ${selectedId === "__custom__" ? "selected" : ""}>-- Custom / Manual Statute Override --</option>`,
+        ...catalog.map((it) => {
+          const capTxt = formatExemptionCapBadge(it, isJoint);
+          return `<option value="${esc(it.id)}" ${selectedId === it.id ? "selected" : ""}>[${esc(it.category)}] ${esc(it.title)} (${esc(capTxt)})</option>`;
+        }),
+      ].join("");
+      const blurbHtml = matched
+        ? `<div style="font-size:11px; color:#475569; margin-top:4px; line-height:1.35; background:#f8fafc; border-left:3px solid var(--gold); padding:4px 7px; border-radius:4px;">${esc(matched.blurb)}</div>`
+        : `<div style="font-size:11px; color:#64748b; margin-top:4px;">Manual / custom statute override — enter any statute &amp; amount freely.</div>`;
+      return `
       <tr>
-        <td><input type="text" value="${esc(ex.schedule_ab_line)}" onchange="updateArr('exemptions',${i},'schedule_ab_line',this.value)"/></td>
-        <td><input type="text" value="${esc(ex.description)}" onchange="updateArr('exemptions',${i},'description',this.value)"/></td>
-        <td><input type="number" step="0.01" value="${ex.current_value || 0}" onchange="updateArrNum('exemptions',${i},'current_value',this.value)"/></td>
-        <td><input type="number" step="0.01" value="${ex.exemption_amount || 0}" onchange="updateArrNum('exemptions',${i},'exemption_amount',this.value)"/></td>
-        <td style="text-align:center;"><input type="checkbox" ${ex.claim_100_percent ? "checked" : ""} onchange="updateArr('exemptions',${i},'claim_100_percent',this.checked)"/></td>
-        <td><input type="text" value="${esc(ex.statute)}" onchange="updateArr('exemptions',${i},'statute',this.value)"/></td>
-        <td><button class="btn btn-danger btn-sm" onclick="removeArr('exemptions',${i})">&times;</button></td>
-      </tr>`).join("")
-    : '<tr><td colspan="7" class="muted">Click "Auto-Apply Florida Exemptions" to populate Schedule C automatically.</td></tr>';
+        <td style="vertical-align:top;"><input type="text" value="${esc(ex.schedule_ab_line)}" onchange="updateArr('exemptions',${i},'schedule_ab_line',this.value)"/></td>
+        <td style="vertical-align:top;"><input type="text" value="${esc(ex.description)}" onchange="updateArr('exemptions',${i},'description',this.value)"/></td>
+        <td style="vertical-align:top;"><input type="number" step="0.01" value="${ex.current_value || 0}" onchange="updateArrNum('exemptions',${i},'current_value',this.value);renderExemptionCapMeters();"/></td>
+        <td style="vertical-align:top;">
+          <select style="width:100%;" onchange="applyExemptionChoice(${i}, this.value)">${opts}</select>
+          ${blurbHtml}
+        </td>
+        <td style="vertical-align:top;">
+          <input type="number" step="0.01" value="${ex.exemption_amount || 0}" onchange="updateExemptionAmt(${i}, this.value)"/>
+        </td>
+        <td style="text-align:center; vertical-align:top; padding-top:10px;">
+          <input type="checkbox" ${ex.claim_100_percent ? "checked" : ""} onchange="updateArr('exemptions',${i},'claim_100_percent',this.checked)"/>
+        </td>
+        <td style="vertical-align:top;">
+          <input type="text" value="${esc(ex.statute)}" onchange="updateArr('exemptions',${i},'statute',this.value);renderExemptionCapMeters();"/>
+        </td>
+        <td style="vertical-align:top;"><button type="button" class="btn btn-danger btn-sm" onclick="removeArr('exemptions',${i})">&times;</button></td>
+      </tr>`;
+    }).join("")
+    : '<tr><td colspan="8" class="muted">Click <strong>"Auto-Apply Exemptions"</strong> or <strong>"Sync All Assets &rarr; Schedule C"</strong> to assign exemptions per asset.</td></tr>';
 }
 
 function renderSecuredCreditors() {
@@ -1527,9 +1993,23 @@ function setupStaticHandlers() {
       scheduleRecalc(true);
       return;
     }
+    if (id === "f-is-joint") {
+      syncScalarsToCase();
+      renderExemptions();
+    }
+    if (id === "f-exemption-scheme" || id === "f-override-exempt-caps") {
+      syncScalarsToCase();
+      renderExemptions();
+      scheduleRecalc(false);
+      return;
+    }
     const triggerFormRefresh = ["f-is-joint", "f-fee-method", "f-rents", "f-eviction", "f-military", "e-sep-hh", "mt-exempt", "f-household-size"].includes(id);
     scheduleRecalc(triggerFormRefresh);
   });
+
+  if ($("exempt-catalog-search")) {
+    $("exempt-catalog-search").addEventListener("input", () => renderExemptionCatalogDirectory());
+  }
 
   // CIF Dropzone
   const dz = $("cif-dropzone");
@@ -1573,12 +2053,31 @@ function setupStaticHandlers() {
     renderPriorBankruptcies();
     scheduleRecalc(false);
   });
-  $("btn-add-re").addEventListener("click", () => {
+  $("btn-add-re-from-d1").addEventListener("click", () => {
+    syncScalarsToCase();
+    const d1 = state.caseData.debtor1 || {};
+    const paInfo = getPropertyAppraiserInfo(d1.county);
     state.caseData.real_estate.push({
-      address: "", city: "", state: "FL", zip_code: "", county: state.caseData.debtor1.county || "",
-      property_type: "Single-family home", is_primary_residence: true, owner: state.caseData.is_joint ? "both" : "debtor1",
+      address: d1.street || "", city: d1.city || "", state: d1.state || "FL",
+      zip_code: d1.zip_code || "", county: d1.county || "",
+      property_type: "Single-family home", is_primary_residence: true,
+      use_debtor_address: true,
+      owner: state.caseData.is_joint ? "both" : "debtor1",
       ownership_nature: "Fee Simple", market_value: 0, portion_owned_value: 0,
-      value_source: "County Property Appraiser Just/Market Value", intent: "Keep",
+      value_source: paInfo.source, intent: "Keep",
+    });
+    renderRealEstate();
+    toast(d1.street ? `Added property using Debtor 1's address (${d1.street})` : "Added property linked to Debtor 1's address (fill Debtor 1 address in Tab 1 to auto-populate)", "ok");
+  });
+  $("btn-add-re").addEventListener("click", () => {
+    const county = state.caseData.debtor1.county || "";
+    state.caseData.real_estate.push({
+      address: "", city: "", state: "FL", zip_code: "", county,
+      property_type: "Single-family home", is_primary_residence: state.caseData.real_estate.length === 0,
+      use_debtor_address: false,
+      owner: state.caseData.is_joint ? "both" : "debtor1",
+      ownership_nature: "Fee Simple", market_value: 0, portion_owned_value: 0,
+      value_source: getPropertyAppraiserInfo(county).source, intent: "Keep",
     });
     renderRealEstate();
   });
@@ -1597,8 +2096,15 @@ function setupStaticHandlers() {
     state.caseData.personal_assets.retirement_accounts.push({ account_type: "401(k)", institution: "", balance: 0 });
     renderRetirementAccounts();
   });
+  $("btn-sync-assets-exempt").addEventListener("click", () => syncAllAssetsToExemptions());
   $("btn-add-exemption").addEventListener("click", () => {
-    state.caseData.exemptions.push({ schedule_ab_line: "", description: "", current_value: 0, exemption_amount: 0, claim_100_percent: false, statute: "Fla. Const. art. X, § 4(a)(2)" });
+    const scheme = getActiveSchemeCode();
+    const defaultStatute = scheme === "FEDERAL" ? "11 U.S.C. § 522(d)(5)" : "Fla. Const. art. X, § 4(a)(2)";
+    const defaultId = scheme === "FEDERAL" ? "fed_wildcard" : "fl_personal";
+    state.caseData.exemptions.push({
+      schedule_ab_line: "", description: "", current_value: 0, exemption_amount: 0,
+      claim_100_percent: false, statute: defaultStatute, exemption_id: defaultId, override_amount: false,
+    });
     renderExemptions();
   });
   $("btn-auto-exemptions").addEventListener("click", async () => {
@@ -1612,7 +2118,8 @@ function setupStaticHandlers() {
       state.caseData.exemptions = res.exemptions || [];
       renderExemptions();
       await recalculate(false);
-      toast(`Applied ${state.caseData.exemptions.length} Florida statutory exemption(s)`, "ok");
+      const sch = getActiveSchemeCode();
+      toast(`Applied ${state.caseData.exemptions.length} ${sch === "FEDERAL" ? "Federal § 522(d)" : sch === "FL" ? "Florida" : sch} statutory exemption(s)`, "ok");
     } catch (err) {
       toast(err.message, "err");
     }
@@ -1740,6 +2247,8 @@ function setupStaticHandlers() {
   });
   $("btn-check-forms").addEventListener("click", () => runTemplateCheck(false));
   $("btn-sync-forms").addEventListener("click", () => runTemplateCheck(true));
+  if ($("btn-check-median")) $("btn-check-median").addEventListener("click", () => runMedianCheck(false));
+  if ($("btn-apply-median")) $("btn-apply-median").addEventListener("click", () => runMedianCheck(true));
 
   // Settings Save
   $("btn-save-settings").addEventListener("click", saveSettingsFromUI);
@@ -1819,14 +2328,26 @@ async function saveDraft() {
 async function generatePacket() {
   syncScalarsToCase();
   const btn = $("btn-generate-main");
+  const wantZip = Boolean($("opt-download-zip")?.checked);
   btn.disabled = true;
   btn.textContent = "Generating Official PDFs...";
   try {
-    const res = await api("/api/generate", {
+    const res = await api(`/api/generate${wantZip ? "?return_zip=true" : ""}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(state.caseData),
     });
+    if (wantZip && res.zip_base64 && !res.zip_url) {
+      const bin = atob(res.zip_base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      res.zip_url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+      res.zip_name = res.zip_name || `${res.folder_name || "Petition_Packet"}.zip`;
+      const a = document.createElement("a");
+      a.href = res.zip_url;
+      a.download = res.zip_name;
+      a.click();
+    }
     state.savedCases = res.saved_cases || state.savedCases;
     renderSavedCases();
     if (res.compliance) {
@@ -1842,7 +2363,7 @@ async function generatePacket() {
       <div class="btn-group" style="margin-bottom: 12px;">
         ${res.processed_by === "python-server" ? "" : `<a class="btn btn-primary" href="${dl(res.combined_pdf)}" target="_blank">Open Combined Public Petition PDF</a>`}
         ${res.b121_restricted_pdf && res.processed_by !== "python-server" ? `<a class="btn btn-danger" href="${dl(res.b121_restricted_pdf)}" target="_blank">Open Restricted Form B121 (SSN)</a>` : ""}
-        ${res.processed_by === "python-server" ? `<span class="tag tag-ok">Saved on Office Python PC + Downloaded as ZIP</span>` : `<a class="btn btn-secondary" href="${dl(res.creditor_txt)}" target="_blank">View Creditor.txt</a>`}
+        ${res.processed_by === "python-server" ? `<span class="tag tag-ok">Saved Directly to Office Clients Folder${res.zip_url ? " + ZIP Downloaded" : ""}</span>` : `<a class="btn btn-secondary" href="${dl(res.creditor_txt)}" target="_blank">View Creditor.txt</a>`}
         ${res.zip_url ? `<a class="btn btn-gold" href="${res.zip_url}" download="${esc(res.zip_name || "Petition_Packet.zip")}">Download Full Client Folder (.zip)</a>` : `<button class="btn btn-gold" onclick="openFolderInExplorer('${esc(res.client_dir.replace(/\\/g, "\\\\"))}')">Open Client Folder in Explorer</button>`}
       </div>
       <details open>
@@ -1884,6 +2405,37 @@ window.openFolderInExplorer = async (folderPath) => {
     toast(err.message, "err");
   }
 };
+
+async function runMedianCheck(apply) {
+  const btn = apply ? $("btn-apply-median") : $("btn-check-median");
+  if (btn) btn.disabled = true;
+  toast(apply ? "Updating Florida Median Income from US Trustee..." : "Checking justice.gov for latest Florida Median Income...");
+  try {
+    const res = await api(`/api/updates/check-median-income?apply=${apply ? "true" : "false"}`, { method: "POST" });
+    const cls = res.status === "up_to_date" || res.status === "updated" ? "alert-ok" : res.status === "update_available" ? "alert-warn" : "alert-info";
+    const fmtTbl = (t) => t ? `1-Person: <strong>${money(t["1"])}</strong> | 2: <strong>${money(t["2"])}</strong> | 3: <strong>${money(t["3"])}</strong> | 4: <strong>${money(t["4"])}</strong> (+${money(t.additional_person)}/ea)` : "—";
+    if ($("median-update-status")) {
+      $("median-update-status").innerHTML = `
+        <div class="alert ${cls}">
+          <strong>${esc(res.note || res.status)}</strong> (Checked ${esc(res.checked_at || "")})<br/>
+          Current App Table: ${fmtTbl(res.current)}<br/>
+          ${res.official ? `Latest Official UST: ${fmtTbl(res.official)}<br/>` : ""}
+          <a href="${esc(res.source_url || "https://www.justice.gov/ust/means-testing")}" target="_blank" rel="noopener">View Official US Trustee Source</a>
+        </div>`;
+    }
+    if (res.applied && res.current) {
+      state.settings.fl_median_income = res.current;
+      populateSettingsUI();
+      await recalculate(false);
+    }
+    toast(res.note || "Median income check finished.", "ok");
+  } catch (err) {
+    if ($("median-update-status")) $("median-update-status").innerHTML = `<div class="alert alert-err">${esc(err.message)}</div>`;
+    toast(err.message, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 async function runTemplateCheck(download) {
   const btn = download ? $("btn-sync-forms") : $("btn-check-forms");

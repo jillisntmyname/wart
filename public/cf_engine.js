@@ -263,12 +263,114 @@ window.CloudflarePetitionEngine = (() => {
   }
 
   function autoApplyFloridaExemptions(c, settings) {
-    const th = settings?.thresholds || DEFAULT_SETTINGS.thresholds;
+    const scheme = String(c.exemption_scheme || "FL").toUpperCase();
     const mult = c.is_joint ? 2 : 1;
+    const pa = c.personal_assets || {};
+    const out = [];
+
+    if (scheme === "FEDERAL") {
+      const homeCap = 31575 * mult;
+      let homeUsed = 0;
+      (c.real_estate || []).forEach((prop, idx) => {
+        const val = Number(prop.portion_owned_value || prop.market_value || 0);
+        if (prop.is_primary_residence && val > 0 && String(prop.intent || "").toLowerCase() !== "surrender") {
+          const mort = (c.secured_creditors || [])
+            .filter((sc) => prop.address && (sc.collateral_desc || "").toLowerCase().includes(prop.address.toLowerCase().slice(0, 12)))
+            .reduce((s, sc) => s + Number(sc.claim_amount || 0), 0);
+          const eq = mort > 0 ? Math.max(0, r2(val - mort)) : val;
+          const cl = r2(Math.min(eq, Math.max(0, homeCap - homeUsed)));
+          if (cl > 0) {
+            homeUsed = r2(homeUsed + cl);
+            out.push({
+              schedule_ab_line: `1.${idx + 1}`,
+              description: [prop.address, prop.city, `${prop.state} ${prop.zip_code}`.trim()].filter(Boolean).join(", ") || "Primary Residence",
+              current_value: val, exemption_amount: cl, claim_100_percent: false,
+              statute: "11 U.S.C. § 522(d)(1)", exemption_id: "fed_homestead",
+            });
+          }
+        }
+      });
+      let vehRem = 5025 * mult;
+      (c.vehicles || []).forEach((v, idx) => {
+        const val = Number(v.portion_owned_value || v.market_value || 0);
+        if (val <= 0 || String(v.intent || "").toLowerCase() === "surrender") return;
+        const eq = Math.max(0, r2(val - Number(v.payoff || 0)));
+        if (eq > 0 && vehRem > 0) {
+          const cl = r2(Math.min(eq, vehRem));
+          vehRem = r2(vehRem - cl);
+          out.push({
+            schedule_ab_line: `3.${idx + 1}`,
+            description: `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim(),
+            current_value: val, exemption_amount: cl, claim_100_percent: false,
+            statute: "11 U.S.C. § 522(d)(2)", exemption_id: "fed_vehicle",
+          });
+        }
+      });
+      let wildRem = r2((1675 * mult) + Math.min(Math.max(0, homeCap - homeUsed), 15800 * mult));
+      let hhRem = 16850 * mult;
+      let jewelRem = 2125 * mult;
+      const hhBuckets = [
+        ["6", pa.household_goods_desc || "Misc. Household Goods", pa.household_goods_val || 0],
+        ["7", pa.electronics_desc || "Electronics", pa.electronics_val || 0],
+        ["11", pa.clothes_desc || "Clothing and Accessories", pa.clothes_val || 0],
+        ["13", pa.animals_desc || "Pets / Animals", pa.animals_val || 0],
+        ["14", pa.other_household_desc || "Other Household Items", pa.other_household_val || 0],
+      ];
+      for (const [ln, desc, val] of hhBuckets) {
+        if (val <= 0) continue;
+        let left = val;
+        if (hhRem > 0) {
+          const cl = r2(Math.min(val, hhRem));
+          hhRem = r2(hhRem - cl);
+          left = r2(val - cl);
+          out.push({ schedule_ab_line: ln, description: String(desc).slice(0, 150), current_value: val, exemption_amount: cl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(3)", exemption_id: "fed_household" });
+        }
+        if (left > 0 && wildRem > 0) {
+          const wcl = r2(Math.min(left, wildRem));
+          wildRem = r2(wildRem - wcl);
+          out.push({ schedule_ab_line: ln, description: String(desc).slice(0, 150), current_value: val, exemption_amount: wcl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(5)", exemption_id: "fed_wildcard" });
+        }
+      }
+      if ((pa.jewelry_val || 0) > 0) {
+        const jv = pa.jewelry_val;
+        let left = jv;
+        if (jewelRem > 0) {
+          const cl = r2(Math.min(jv, jewelRem));
+          jewelRem = r2(jewelRem - cl);
+          left = r2(jv - cl);
+          out.push({ schedule_ab_line: "12", description: String(pa.jewelry_desc || "Jewelry").slice(0, 150), current_value: jv, exemption_amount: cl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(4)", exemption_id: "fed_jewelry" });
+        }
+        if (left > 0 && wildRem > 0) {
+          const wcl = r2(Math.min(left, wildRem));
+          wildRem = r2(wildRem - wcl);
+          out.push({ schedule_ab_line: "12", description: String(pa.jewelry_desc || "Jewelry").slice(0, 150), current_value: jv, exemption_amount: wcl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(5)", exemption_id: "fed_wildcard" });
+        }
+      }
+      const wBuckets = [
+        ["8", pa.collectibles_desc || "Collectibles", pa.collectibles_val || 0],
+        ["9", pa.sports_hobby_desc || "Sports & Hobby Equipment", pa.sports_hobby_val || 0],
+        ["10", pa.firearms_desc || "Firearms", pa.firearms_val || 0],
+        ["16", "Cash on Hand", pa.cash_on_hand || 0],
+      ];
+      (pa.bank_accounts || []).forEach((b, i) => { if (b.balance > 0) wBuckets.push([`17.${i + 1}`, `${b.account_type}: ${b.institution}`, b.balance]); });
+      if (pa.security_deposit_rent_val > 0) wBuckets.push(["22", `Security Deposit: ${pa.security_deposit_landlord}`, pa.security_deposit_rent_val]);
+      if (pa.tax_refund_val > 0) wBuckets.push(["28", pa.tax_refund_desc || "Tax Refund", pa.tax_refund_val]);
+      for (const [ln, desc, val] of wBuckets) {
+        if (val <= 0 || wildRem <= 0) continue;
+        const wcl = r2(Math.min(val, wildRem));
+        wildRem = r2(wildRem - wcl);
+        out.push({ schedule_ab_line: ln, description: String(desc).slice(0, 150), current_value: val, exemption_amount: wcl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(5)", exemption_id: "fed_wildcard" });
+      }
+      (pa.retirement_accounts || []).forEach((r) => {
+        if (r.balance > 0) out.push({ schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}`, current_value: r.balance, exemption_amount: r.balance, claim_100_percent: true, statute: "11 U.S.C. § 522(d)(12)", exemption_id: "fed_retirement" });
+      });
+      return out;
+    }
+
+    const th = settings?.thresholds || DEFAULT_SETTINGS.thresholds;
     let vehRem = Number(th.fl_vehicle_exemption || 5000) * mult;
     let persRem = Number(th.fl_personal_property_exemption || 1000) * mult;
     const wildCap = Number(th.fl_wildcard_exemption || 4000) * mult;
-    const out = [];
     let hasHomestead = false;
 
     (c.real_estate || []).forEach((prop, idx) => {
@@ -284,6 +386,7 @@ window.CloudflarePetitionEngine = (() => {
           description: [prop.address, prop.city, `${prop.state} ${prop.zip_code}`.trim()].filter(Boolean).join(", ") || "Primary Residence",
           current_value: val, exemption_amount: eq, claim_100_percent: false,
           statute: "Fla. Const. art. X § 4(a)(1); Fla. Stat. Ann. §§ 222.01, .02",
+          exemption_id: "fl_homestead",
         });
       }
     });
@@ -300,17 +403,22 @@ window.CloudflarePetitionEngine = (() => {
           description: `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim(),
           current_value: val, exemption_amount: cl, claim_100_percent: false,
           statute: "Fla. Stat. Ann. § 222.25(1)",
+          exemption_id: "fl_vehicle",
         });
       }
     });
 
     let wildRem = hasHomestead ? 0 : wildCap;
-    const pa = c.personal_assets || {};
     const buckets = [
       ["6", pa.household_goods_desc || "Misc. Household Goods", pa.household_goods_val || 0],
       ["7", pa.electronics_desc || "Electronics", pa.electronics_val || 0],
+      ["8", pa.collectibles_desc || "Collectibles", pa.collectibles_val || 0],
+      ["9", pa.sports_hobby_desc || "Sports & Hobby Equipment", pa.sports_hobby_val || 0],
+      ["10", pa.firearms_desc || "Firearms", pa.firearms_val || 0],
       ["11", pa.clothes_desc || "Clothing and Accessories", pa.clothes_val || 0],
       ["12", pa.jewelry_desc || "Jewelry", pa.jewelry_val || 0],
+      ["13", pa.animals_desc || "Pets / Animals", pa.animals_val || 0],
+      ["14", pa.other_household_desc || "Other Household Items", pa.other_household_val || 0],
       ["16", "Cash on Hand", pa.cash_on_hand || 0],
     ];
     (pa.bank_accounts || []).forEach((b, i) => {
@@ -330,6 +438,7 @@ window.CloudflarePetitionEngine = (() => {
           schedule_ab_line: lineNo, description: String(desc).slice(0, 150),
           current_value: val, exemption_amount: cl, claim_100_percent: false,
           statute: "Fla. Const. art. X, § 4(a)(2)",
+          exemption_id: "fl_personal",
         });
       }
       if (left > 0 && wildRem > 0) {
@@ -339,6 +448,7 @@ window.CloudflarePetitionEngine = (() => {
           schedule_ab_line: lineNo, description: String(desc).slice(0, 150),
           current_value: val, exemption_amount: wcl, claim_100_percent: false,
           statute: "Fla. Stat. Ann. § 222.25(4) (Wildcard)",
+          exemption_id: "fl_wildcard",
         });
       }
     }
@@ -348,9 +458,17 @@ window.CloudflarePetitionEngine = (() => {
           schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}`,
           current_value: r.balance, exemption_amount: r.balance, claim_100_percent: true,
           statute: "Fla. Stat. Ann. § 222.21(2)",
+          exemption_id: "fl_retirement",
         });
       }
     });
+    if ((pa.life_insurance_cash_val || 0) > 0) {
+      out.push({
+        schedule_ab_line: "31", description: `Life Insurance: ${pa.life_insurance_company || ""}`.trim(),
+        current_value: pa.life_insurance_cash_val, exemption_amount: pa.life_insurance_cash_val, claim_100_percent: true,
+        statute: "Fla. Stat. Ann. § 222.14", exemption_id: "fl_life_annuity",
+      });
+    }
     return out;
   }
 
@@ -402,6 +520,15 @@ window.CloudflarePetitionEngine = (() => {
         ? { level: "ok", code: "CC_CERT", title: `Pre-Filing Credit Counseling Complete (${c.credit_counseling_agency || "Debtorcc.org"})`, detail: "Remember to file the Debtorcc.org certificate separately on CM/ECF." }
         : { level: "error", code: "CC_CERT", title: "Credit Counseling Certificate Required (11 U.S.C. § 109(h))", detail: "Complete briefing via Debtorcc.org within 180 days prior to filing." }
     );
+    const scheme = String(c.exemption_scheme || "FL").toUpperCase();
+    if (scheme !== "FL") {
+      checks.push({
+        level: "warn",
+        code: "EXEMPT_OVERRIDE",
+        title: `Exemption Override Active: ${scheme === "FEDERAL" ? "Federal 11 U.S.C. § 522(d)" : scheme + " State Exemptions"}`,
+        detail: "Florida opt-out exemptions overridden. Confirm 730-day domicile eligibility under 11 U.S.C. § 522(b)(3)(A).",
+      });
+    }
     checks.push({
       level: c.debtor1?.ssn || c.debtor1?.ssn_last4 ? "ok" : "warn",
       code: "SSN_PRIVACY",
@@ -923,6 +1050,19 @@ window.CloudflarePetitionEngine = (() => {
       }
       safeSetText(form, "Debtor attorney Sig.1", att.signature, helv);
       safeSetText(form, "Debtor attorney date.1", c.filing_date, helv);
+    } else if (fid === "B106C") {
+      const scheme = String(c.exemption_scheme || "FL").toUpperCase();
+      try {
+        form.getRadioGroup("1").select(scheme === "FEDERAL" ? "federal" : "state and federal");
+      } catch (_) {}
+      (c.exemptions || []).slice(0, 12).forEach((ex, i) => {
+        const idx = i + 1;
+        safeSetText(form, `Brief description.${idx}`, ex.description, helv);
+        safeSetText(form, `Line.${idx}`, ex.schedule_ab_line, helv);
+        safeSetText(form, `Current value.${idx}`, fmtMoney(ex.current_value), helv);
+        safeSetText(form, `Specific laws.${idx}`, ex.statute, helv);
+        if (!ex.claim_100_percent) safeSetText(form, `Amount.${idx}`, fmtMoney(ex.exemption_amount), helv);
+      });
     } else if (fid === "B106Sum") {
       safeSetText(form, "1a", fmtMoney(totals.real_estate_total), helv);
       safeSetText(form, "1b", fmtMoney(totals.personal_property_total), helv);

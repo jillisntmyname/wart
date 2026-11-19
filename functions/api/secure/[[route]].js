@@ -106,13 +106,24 @@ export async function onRequestPost({ request, params, env }) {
         if (!resp.ok) throw new Error(body.detail || `Python creditor import failed (${resp.status})`);
         resultObj = { ...body, processed_by: "python-server" };
       } else if (route === "generate") {
-        const resp = await fetch(`${backendUrl}/api/generate?return_zip=true`, {
+        const wantZip = Boolean(cleanPayload?.include_zip);
+        const caseObj = cleanPayload?.case_data || cleanPayload;
+        const resp = await fetch(`${backendUrl}/api/generate?return_zip=${wantZip ? "true" : "false"}`, {
           method: "POST",
           headers: relayHeaders(true),
-          body: JSON.stringify(cleanPayload.case_data || cleanPayload),
+          body: JSON.stringify(caseObj),
         });
         const body = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(body.detail || `Python PDF generation failed (${resp.status})`);
+        resultObj = { ...body, processed_by: "python-server" };
+      } else if (route === "check-median-income") {
+        const applyFlag = Boolean(cleanPayload?.apply);
+        const resp = await fetch(`${backendUrl}/api/updates/check-median-income?apply=${applyFlag ? "true" : "false"}`, {
+          method: "POST",
+          headers: relayHeaders(false),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.detail || `Python median income check failed (${resp.status})`);
         resultObj = { ...body, processed_by: "python-server" };
       } else if (route === "cases-list") {
         const resp = await fetch(`${backendUrl}/api/cases`, { method: "GET", headers: relayHeaders(false) });

@@ -352,7 +352,7 @@ window.CloudflarePetitionEngine = (() => {
         ["10", pa.firearms_desc || "Firearms", pa.firearms_val || 0],
         ["16", "Cash on Hand", pa.cash_on_hand || 0],
       ];
-      (pa.bank_accounts || []).forEach((b, i) => { if (b.balance > 0) wBuckets.push([`17.${i + 1}`, `${b.account_type}: ${b.institution}`, b.balance]); });
+      (pa.bank_accounts || []).forEach((b, i) => { if (b.balance > 0) wBuckets.push([`17.${i + 1}`, `${b.account_type}: ${b.institution}${b.account_last4 ? ` (x${b.account_last4})` : ""}`, b.balance]); });
       if (pa.security_deposit_rent_val > 0) wBuckets.push(["22", `Security Deposit: ${pa.security_deposit_landlord}`, pa.security_deposit_rent_val]);
       if (pa.tax_refund_val > 0) wBuckets.push(["28", pa.tax_refund_desc || "Tax Refund", pa.tax_refund_val]);
       for (const [ln, desc, val] of wBuckets) {
@@ -362,7 +362,7 @@ window.CloudflarePetitionEngine = (() => {
         out.push({ schedule_ab_line: ln, description: String(desc).slice(0, 150), current_value: val, exemption_amount: wcl, claim_100_percent: false, statute: "11 U.S.C. § 522(d)(5)", exemption_id: "fed_wildcard" });
       }
       (pa.retirement_accounts || []).forEach((r) => {
-        if (r.balance > 0) out.push({ schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}`, current_value: r.balance, exemption_amount: r.balance, claim_100_percent: true, statute: "11 U.S.C. § 522(d)(12)", exemption_id: "fed_retirement" });
+        if (r.balance > 0) out.push({ schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}${r.account_last4 ? ` (x${r.account_last4})` : ""}`, current_value: r.balance, exemption_amount: r.balance, claim_100_percent: true, statute: "11 U.S.C. § 522(d)(12)", exemption_id: "fed_retirement" });
       });
       return out;
     }
@@ -422,7 +422,7 @@ window.CloudflarePetitionEngine = (() => {
       ["16", "Cash on Hand", pa.cash_on_hand || 0],
     ];
     (pa.bank_accounts || []).forEach((b, i) => {
-      if (b.balance > 0) buckets.push([`17.${i + 1}`, `${b.account_type}: ${b.institution}`, b.balance]);
+      if (b.balance > 0) buckets.push([`17.${i + 1}`, `${b.account_type}: ${b.institution}${b.account_last4 ? ` (x${b.account_last4})` : ""}`, b.balance]);
     });
     if (pa.security_deposit_rent_val > 0) buckets.push(["22", `Security Deposit: ${pa.security_deposit_landlord}`, pa.security_deposit_rent_val]);
     if (pa.tax_refund_val > 0) buckets.push(["28", pa.tax_refund_desc || "Tax Refund", pa.tax_refund_val]);
@@ -455,7 +455,7 @@ window.CloudflarePetitionEngine = (() => {
     (pa.retirement_accounts || []).forEach((r) => {
       if (r.balance > 0) {
         out.push({
-          schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}`,
+          schedule_ab_line: "21", description: `${r.account_type}: ${r.institution}${r.account_last4 ? ` (x${r.account_last4})` : ""}`,
           current_value: r.balance, exemption_amount: r.balance, claim_100_percent: true,
           statute: "Fla. Stat. Ann. § 222.21(2)",
           exemption_id: "fl_retirement",

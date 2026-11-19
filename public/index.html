@@ -600,12 +600,12 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <h2>Integrated FLMB Tampa Division Means Test Calculator (<code>flmb-ch13-means-test</code>)</h2>
-            <div class="muted">Directly connected on the same local server &mdash; push client data into your Means Test calculator, refine paystubs/YTD/IRS standards, and pull results straight into Official Forms 122A-1 / 122C-1.</div>
+            <h2>Integrated FLMB Tampa Division Means Test Calculator <span class="tag tag-ok" id="mt-live-sync-pill" style="margin-left:8px;">&#128260; Live Two-Way Auto-Sync Active</span></h2>
+            <div class="muted">Tightly linked in real time &mdash; Debtor 1/2 names, county, household size, filing date, income, and debts flow automatically to the Means Test, and every Means Test edit (paystubs, YTD, CMI, IRS standards, Line 45 MDI) automatically updates your Petition Forms (122A-1 / 122A-2 / 122C-1 / 122C-2).</div>
           </div>
           <div class="btn-group">
-            <button class="btn btn-primary" id="btn-push-mt">1. Push Case Data &rarr; Means Test</button>
-            <button class="btn btn-gold" id="btn-pull-mt">2. Pull Results &rarr; Petition Forms</button>
+            <button class="btn btn-secondary btn-sm" id="btn-push-mt" title="Re-push all Petition fields into Means Test">Re-Sync Petition &rarr; MT</button>
+            <button class="btn btn-gold btn-sm" id="btn-pull-mt" title="Force pull latest Means Test results into Petition">Sync MT &rarr; Petition</button>
             <button class="btn btn-secondary btn-sm" id="btn-open-mt-site">Open Full Screen</button>
           </div>
         </div>
@@ -922,7 +922,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="/exemptions_catalog.js?v=1"></script>
   <script src="/crypto_client.js?v=2"></script>
-  <script src="/cf_engine.js?v=3"></script>
-  <script src="/app.js?v=7"></script>
+  <script src="/cf_engine.js?v=4"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>

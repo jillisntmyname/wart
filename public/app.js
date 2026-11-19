@@ -688,6 +688,7 @@ async function api(url, opts = {}) {
 async function init() {
   state.caseData = createBlankCase("7");
   setupAutoFormatters();
+  setupMeansTestBridge();
   setupTabs();
   setupStaticHandlers();
   renderAllCaseUI();
@@ -719,6 +720,9 @@ function setupTabs() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       $(`tab-${btn.dataset.tab}`).classList.add("active");
+      if (btn.dataset.tab === "means") {
+        pushCaseToMeansTest({ replaceAll: false, silent: true });
+      }
     });
   });
 }
@@ -1412,15 +1416,16 @@ function renderBankAccounts() {
   const arr = state.caseData.personal_assets.bank_accounts || [];
   $("bank-accounts-list").innerHTML = arr.length
     ? arr.map((b, i) => `
-      <div class="grid-4" style="align-items:end;">
-        <div class="field"><label>Type</label>
+      <div style="display:grid; grid-template-columns: 110px 1.4fr 110px 120px auto; gap:8px; align-items:end; margin-bottom:8px;">
+        <div class="field" style="margin-bottom:0;"><label>Type</label>
           <select onchange="updateSubArr('bank_accounts',${i},'account_type',this.value)">
             ${["Checking", "Savings", "CD", "Other"].map((t) => `<option value="${t}" ${b.account_type === t ? "selected" : ""}>${t}</option>`).join("")}
           </select>
         </div>
-        <div class="field"><label>Bank / Credit Union</label><input type="text" value="${esc(b.institution)}" onchange="updateSubArr('bank_accounts',${i},'institution',this.value)"/></div>
-        <div class="field"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(b.balance))}" onchange="updateSubArrNum('bank_accounts',${i},'balance',this.value)"/></div>
-        <div class="field"><button class="btn btn-danger btn-sm" onclick="removeSubArr('bank_accounts',${i})">Remove</button></div>
+        <div class="field" style="margin-bottom:0;"><label>Bank / Credit Union</label><input type="text" value="${esc(b.institution)}" placeholder="e.g., Bank of America" onchange="updateSubArr('bank_accounts',${i},'institution',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><label>Acct # (Last 4)</label><input type="text" value="${esc(b.account_last4)}" placeholder="e.g., 4821" onchange="updateSubArr('bank_accounts',${i},'account_last4',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(b.balance))}" onchange="updateSubArrNum('bank_accounts',${i},'balance',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><button type="button" class="btn btn-danger btn-sm" onclick="removeSubArr('bank_accounts',${i})">&times;</button></div>
       </div>`).join("")
     : '<div class="muted">No bank accounts listed.</div>';
 }
@@ -1429,15 +1434,16 @@ function renderRetirementAccounts() {
   const arr = state.caseData.personal_assets.retirement_accounts || [];
   $("retirement-accounts-list").innerHTML = arr.length
     ? arr.map((r, i) => `
-      <div class="grid-4" style="align-items:end;">
-        <div class="field"><label>Type</label>
+      <div style="display:grid; grid-template-columns: 110px 1.4fr 110px 120px auto; gap:8px; align-items:end; margin-bottom:8px;">
+        <div class="field" style="margin-bottom:0;"><label>Type</label>
           <select onchange="updateSubArr('retirement_accounts',${i},'account_type',this.value)">
             ${["401(k)", "IRA", "Pension", "Retirement", "Other"].map((t) => `<option value="${t}" ${r.account_type === t ? "selected" : ""}>${t}</option>`).join("")}
           </select>
         </div>
-        <div class="field"><label>Institution</label><input type="text" value="${esc(r.institution)}" onchange="updateSubArr('retirement_accounts',${i},'institution',this.value)"/></div>
-        <div class="field"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(r.balance))}" onchange="updateSubArrNum('retirement_accounts',${i},'balance',this.value)"/></div>
-        <div class="field"><button class="btn btn-danger btn-sm" onclick="removeSubArr('retirement_accounts',${i})">Remove</button></div>
+        <div class="field" style="margin-bottom:0;"><label>Institution</label><input type="text" value="${esc(r.institution)}" placeholder="e.g., Fidelity / Vanguard" onchange="updateSubArr('retirement_accounts',${i},'institution',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><label>Acct # (Last 4)</label><input type="text" value="${esc(r.account_last4)}" placeholder="e.g., 9104" onchange="updateSubArr('retirement_accounts',${i},'account_last4',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><label>Balance ($)</label><input type="text" inputmode="decimal" data-format="currency" value="${esc(formatCurrencyDisplay(r.balance))}" onchange="updateSubArrNum('retirement_accounts',${i},'balance',this.value)"/></div>
+        <div class="field" style="margin-bottom:0;"><button type="button" class="btn btn-danger btn-sm" onclick="removeSubArr('retirement_accounts',${i})">&times;</button></div>
       </div>`).join("")
     : '<div class="muted">No retirement accounts listed.</div>';
 }
@@ -1707,10 +1713,16 @@ function syncAllAssetsToExemptions() {
     if (Number(val || 0) > 0) candidates.push([ln, desc, Number(val)]);
   });
   (pa.bank_accounts || []).forEach((b, i) => {
-    if (Number(b.balance || 0) > 0) candidates.push([`17.${i + 1}`, `${b.account_type || "Account"}: ${b.institution || ""}`.trim(), Number(b.balance)]);
+    if (Number(b.balance || 0) > 0) {
+      const sfx = b.account_last4 ? ` (x${b.account_last4})` : "";
+      candidates.push([`17.${i + 1}`, `${b.account_type || "Account"}: ${b.institution || ""}${sfx}`.trim(), Number(b.balance)]);
+    }
   });
   (pa.retirement_accounts || []).forEach((r, i) => {
-    if (Number(r.balance || 0) > 0) candidates.push([`21.${i + 1}`, `${r.account_type || "Retirement"}: ${r.institution || ""}`.trim(), Number(r.balance)]);
+    if (Number(r.balance || 0) > 0) {
+      const sfx = r.account_last4 ? ` (x${r.account_last4})` : "";
+      candidates.push([`21.${i + 1}`, `${r.account_type || "Retirement"}: ${r.institution || ""}${sfx}`.trim(), Number(r.balance)]);
+    }
   });
 
   let added = 0;
@@ -2148,6 +2160,8 @@ function applyServerCaseResponse(res) {
   renderCompliance();
   renderFormsChecklist(res.recommended_forms || []);
   renderMatrixPreview();
+  // Automatically push newly loaded / imported client straight into the embedded Means Test
+  pushCaseToMeansTest({ replaceAll: true, silent: true });
 }
 
 /* ==================== UPDATES & TEMPLATES ==================== */
@@ -2271,6 +2285,7 @@ function setupStaticHandlers() {
     if (id === "f-chapter") {
       applyChapterDefaultsToCase($("f-chapter").value);
       scheduleRecalc(true);
+      pushCaseToMeansTest({ replaceAll: false, silent: true });
       return;
     }
     if (id === "f-is-joint") {
@@ -2285,6 +2300,16 @@ function setupStaticHandlers() {
     }
     const triggerFormRefresh = ["f-is-joint", "f-fee-method", "f-rents", "f-eviction", "f-military", "e-sep-hh", "mt-exempt", "f-household-size"].includes(id);
     scheduleRecalc(triggerFormRefresh);
+
+    // Tightly auto-sync Petition edits -> Means Test whenever names, filing info, income, or expenses change
+    const mtSyncIds = [
+      "f-is-joint", "f-filing-date", "f-case-number", "f-household-size", "f-rents",
+      "d1-first", "d1-middle", "d1-last", "d1-suffix", "d1-county",
+      "d2-first", "d2-middle", "d2-last", "d2-suffix", "sofa-marital", "f-hh-contrib",
+    ];
+    if (mtSyncIds.includes(id) || id.startsWith("i1-") || id.startsWith("i2-") || id.startsWith("e-") || id.startsWith("fee-")) {
+      pushCaseToMeansTest({ replaceAll: false, silent: true });
+    }
   });
 
   if ($("exempt-catalog-search")) {
@@ -2312,6 +2337,7 @@ function setupStaticHandlers() {
     state.caseData = createBlankCase($("import-chapter").value);
     renderAllCaseUI();
     recalculate(true);
+    pushCaseToMeansTest({ replaceAll: true, silent: true });
     toast("Started new blank case");
   });
   $("btn-sample-ch7").addEventListener("click", () => loadSample("7", false));
@@ -2373,7 +2399,7 @@ function setupStaticHandlers() {
     renderBankAccounts();
   });
   $("btn-add-ret").addEventListener("click", () => {
-    state.caseData.personal_assets.retirement_accounts.push({ account_type: "401(k)", institution: "", balance: 0 });
+    state.caseData.personal_assets.retirement_accounts.push({ account_type: "401(k)", institution: "", account_last4: "", balance: 0 });
     renderRetirementAccounts();
   });
   $("btn-sync-assets-exempt").addEventListener("click", () => syncAllAssetsToExemptions());
@@ -2814,8 +2840,8 @@ function buildFlmbMeansTestCasePayload() {
   syncScalarsToCase();
   const c = state.caseData;
   const att = state.settings?.attorney || {};
-  const d1Name = [c.debtor1.first_name, c.debtor1.middle_name, c.debtor1.last_name].filter(Boolean).join(" ") || c.debtor1.full_name || "Client";
-  const d2Name = [c.debtor2.first_name, c.debtor2.middle_name, c.debtor2.last_name].filter(Boolean).join(" ") || c.debtor2.full_name || "";
+  const d1Name = [c.debtor1.first_name, c.debtor1.middle_name, c.debtor1.last_name, c.debtor1.suffix].filter(Boolean).join(" ") || c.debtor1.full_name || "";
+  const d2Name = [c.debtor2.first_name, c.debtor2.middle_name, c.debtor2.last_name, c.debtor2.suffix].filter(Boolean).join(" ") || c.debtor2.full_name || "";
   const hhSize = Math.max(1, parseInt(c.household_size, 10) || 1);
   const childrenUnder18 = (c.dependents || []).filter((d) => {
     const age = parseInt(d.age, 10);
@@ -2884,7 +2910,7 @@ function buildFlmbMeansTestCasePayload() {
       : "single";
 
   return {
-    clientName: c.is_joint && d2Name ? `${d1Name} & ${d2Name}` : d1Name,
+    clientName: d1Name,
     spouseName: d2Name,
     caseNumber: c.case_number || "",
     filingStatus,
@@ -2969,21 +2995,185 @@ function buildFlmbMeansTestCasePayload() {
   };
 }
 
-function pushCaseToMeansTest() {
+let _mtIframeReady = false;
+let _mtAutoSyncTimer = null;
+
+function _splitPersonFullName(fullStr) {
+  const s = String(fullStr || "").trim().replace(/\s+/g, " ");
+  if (!s) return { first: "", middle: "", last: "", suffix: "", full: "" };
+  const parts = s.split(" ");
+  let suffix = "";
+  if (parts.length > 2 && /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1])) {
+    suffix = parts.pop();
+  }
+  const first = parts[0] || "";
+  const last = parts.length > 1 ? parts[parts.length - 1] : "";
+  const middle = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
+  return { first, middle, last, suffix, full: s };
+}
+
+function _isoToMdy(iso) {
+  const m = String(iso || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : "";
+}
+
+function setupMeansTestBridge() {
+  window.addEventListener("message", (ev) => {
+    const msg = ev.data;
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "FLMB_MEANS_TEST_READY") {
+      _mtIframeReady = true;
+      pushCaseToMeansTest({ replaceAll: true, silent: true });
+      return;
+    }
+    if (msg.type === "FLMB_MEANS_TEST_UPDATE" && msg.caseState && msg.calc) {
+      _mtIframeReady = true;
+      applyMeansTestSnapshotToPetition(msg.caseState, msg.calc, { silent: true });
+    }
+  });
+}
+
+function pushCaseToMeansTest(opts = {}) {
+  const replaceAll = opts && typeof opts === "object" && "replaceAll" in opts ? !!opts.replaceAll : true;
+  const silent = opts && typeof opts === "object" && "silent" in opts ? !!opts.silent : false;
   try {
     const payload = buildFlmbMeansTestCasePayload();
-    localStorage.setItem(FLMB_MT_STORAGE_KEY, JSON.stringify(payload));
-    const url = $("mt-site-url").value.trim() || state.settings?.means_test_url || "/means-test/index.html";
-    $("mt-iframe").src = url + (url.includes("?") ? "&" : "?") + "_sync=" + Date.now();
-    $("mt-sync-status").innerHTML = `
-      <div class="alert alert-ok">
-        <strong>Pushed client "${esc(payload.clientName)}" (${esc(payload.tampaCounty)} County, HH Size ${payload.householdSize}) into FLMB Means Test Calculator!</strong><br/>
-        You can now switch to Two-Statement YTD or Paystub Log in Tab 2 of the calculator below, adjust IRS/UST standards, and click <strong>"2. Pull Results &rarr; Petition Forms"</strong>.
-      </div>`;
-    toast("Pushed case data to FLMB Means Test Calculator!", "ok");
+    if (replaceAll) {
+      localStorage.setItem(FLMB_MT_STORAGE_KEY, JSON.stringify(payload));
+    }
+    const iframe = $("mt-iframe");
+    if (iframe && iframe.contentWindow && _mtIframeReady) {
+      iframe.contentWindow.postMessage({ type: "PETITION_PUSH_TO_MEANS_TEST", payload, replaceAll }, "*");
+    } else if (iframe && replaceAll) {
+      localStorage.setItem(FLMB_MT_STORAGE_KEY, JSON.stringify(payload));
+    }
+    if (!silent) {
+      $("mt-sync-status").innerHTML = `
+        <div class="alert alert-ok">
+          <strong>Synced "${esc(payload.clientName || "Client")}"${payload.spouseName ? ` &amp; "${esc(payload.spouseName)}"` : ""} (${esc(payload.tampaCounty)} County, HH Size ${payload.householdSize}) &rarr; Means Test!</strong>
+        </div>`;
+      toast("Synced case data to FLMB Means Test!", "ok");
+    }
   } catch (err) {
-    toast("Push error: " + err.message, "err");
+    if (!silent) toast("Push error: " + err.message, "err");
   }
+}
+
+function applyMeansTestSnapshotToPetition(mtCase, calc, opts = {}) {
+  const silent = !!opts.silent;
+  const c = state.caseData;
+  if (!c || !calc) return;
+  const oi = mtCase.otherIncome || {};
+
+  // 1. Sync Debtor 1 & Debtor 2 names (exact 1-to-1 match!)
+  const mtD1 = String(mtCase.clientName || "").trim();
+  const curD1 = [c.debtor1.first_name, c.debtor1.middle_name, c.debtor1.last_name, c.debtor1.suffix].filter(Boolean).join(" ").trim();
+  if (mtD1 && mtD1 !== "Client" && mtD1 !== curD1) {
+    const p1 = _splitPersonFullName(mtD1);
+    c.debtor1.first_name = p1.first;
+    c.debtor1.middle_name = p1.middle;
+    c.debtor1.last_name = p1.last;
+    c.debtor1.suffix = p1.suffix;
+    c.debtor1.full_name = p1.full;
+  }
+  const mtD2 = String(mtCase.spouseName || "").trim();
+  const curD2 = [c.debtor2.first_name, c.debtor2.middle_name, c.debtor2.last_name, c.debtor2.suffix].filter(Boolean).join(" ").trim();
+  if (mtD2 && mtD2 !== curD2) {
+    const p2 = _splitPersonFullName(mtD2);
+    c.debtor2.first_name = p2.first;
+    c.debtor2.middle_name = p2.middle;
+    c.debtor2.last_name = p2.last;
+    c.debtor2.suffix = p2.suffix;
+    c.debtor2.full_name = p2.full;
+  }
+
+  // 2. Sync Case Metadata (Case #, Filing Date, Tampa County, Joint Status, Household Size, Employers)
+  if (mtCase.caseNumber !== undefined && String(mtCase.caseNumber).trim() !== c.case_number) {
+    c.case_number = String(mtCase.caseNumber || "").trim();
+  }
+  const mdy = _isoToMdy(mtCase.filingDate);
+  if (mdy && mdy !== c.filing_date) {
+    c.filing_date = mdy;
+  }
+  if (mtCase.tampaCounty && mtCase.tampaCounty !== c.debtor1.county) {
+    c.debtor1.county = mtCase.tampaCounty;
+  }
+  const mtJoint = mtCase.filingStatus === "joint" || !!mtCase.enableDebtor2;
+  if (mtJoint !== !!c.is_joint) {
+    c.is_joint = mtJoint;
+  }
+  if (calc.hhSize && calc.hhSize !== c.household_size) {
+    c.household_size = calc.hhSize;
+  }
+  if (mtCase.earners?.d1?.employerName) {
+    c.income_debtor1.employer_name = mtCase.earners.d1.employerName;
+    c.income_debtor1.employed = true;
+  }
+  if (mtCase.earners?.d2?.employerName) {
+    c.income_debtor2.employer_name = mtCase.earners.d2.employerName;
+    c.income_debtor2.employed = true;
+  }
+
+  // 3. Sync Schedule I gross wages/deductions automatically if Schedule I is currently blank and Means Test has figures
+  if (Number(c.income_debtor1.monthly_gross_wages || 0) === 0 && Number(calc.d1?.gross || 0) > 0) {
+    c.income_debtor1.monthly_gross_wages = round2(calc.d1.gross);
+    c.income_debtor1.employed = true;
+  }
+  if (c.is_joint && Number(c.income_debtor2.monthly_gross_wages || 0) === 0 && Number(calc.d2?.gross || 0) > 0) {
+    c.income_debtor2.monthly_gross_wages = round2(calc.d2.gross);
+    c.income_debtor2.employed = true;
+  }
+
+  // 4. Sync Full Means Test Calculation into Official Forms 122A-1 / 122A-2 / 122C-1 / 122C-2
+  const mt = c.means_test;
+  mt.source = "external_site";
+  mt.household_size = calc.hhSize;
+  mt.fl_median_income = Number(calc.flMedianAnnual || 0);
+  mt.d1_cmi_wages = round2(calc.d1?.gross || 0);
+  mt.d2_cmi_wages = round2(calc.d2?.gross || 0);
+  mt.d1_cmi_business_net = round2(calc.netBusiness || 0);
+  mt.d1_cmi_rental_net = round2(oi.rentalNet || 0);
+  mt.d1_cmi_interest = round2(oi.interestDiv || 0);
+  mt.d1_cmi_contributions = round2(oi.supportContrib || 0);
+  mt.d1_cmi_unemployment = round2(oi.unemployment || 0);
+  mt.d1_cmi_pension = round2(oi.pension || 0);
+  mt.d1_cmi_other = round2(oi.otherCmi || 0);
+  mt.d1_social_security_excluded = round2(oi.exclSocialSecurity || 0);
+  mt.marital_adjustment = round2(calc.maritalAdj || 0);
+  mt.total_cmi = round2(calc.totalMonthlyCmi || 0);
+  mt.annualized_cmi = round2(calc.annualizedCmi || 0);
+  mt.above_median = !!calc.isAboveMedian;
+  mt.commitment_years = calc.commitmentPeriodMonths === 60 ? 5 : 3;
+  mt.monthly_disposable_income = round2(calc.totals?.monthlyDisposableIncome || 0);
+  mt.external_notes =
+    `Auto-Synced from FLMB Means Test (${calc.stdPreset?.label || "2026-mid"}, ${calc.countyData?.name || ""}) | ` +
+    `CMI: ${money(mt.total_cmi)}/mo | Annualized: ${money(mt.annualized_cmi)} vs FL Median ${money(mt.fl_median_income)} | ` +
+    `IRS/UST Deductions: ${money(calc.totals?.totalAllDeductions || 0)}/mo | ` +
+    `Line 45 Monthly Disposable Income: ${money(mt.monthly_disposable_income)}/mo (${calc.commitmentPeriodMonths}-mo commitment)`;
+
+  populateScalarsFromCase();
+
+  const ts = new Date().toLocaleTimeString();
+  const statusEl = $("mt-sync-status");
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div class="alert alert-ok" style="margin-bottom:8px;">
+        <strong>Auto-Synced to Petition Forms (${ts}):</strong>
+        Monthly CMI <strong>${money(mt.total_cmi)}</strong> &bull;
+        Annualized <strong>${money(mt.annualized_cmi)}</strong> vs FL Median (HH ${calc.hhSize}): <strong>${money(mt.fl_median_income)}</strong> &bull;
+        <strong>${calc.isAboveMedian ? "Above Median (" + calc.commitmentPeriodMonths + "-mo / 122A-2 or 122C-2 Auto-Selected)" : "Below Median (" + calc.commitmentPeriodMonths + "-mo)"}</strong> &bull;
+        Line 45 MDI: <strong>${money(mt.monthly_disposable_income)}/mo</strong>
+      </div>`;
+  }
+  const pill = $("mt-live-sync-pill");
+  if (pill) pill.textContent = `🔄 Live Synced (${ts})`;
+
+  clearTimeout(_mtAutoSyncTimer);
+  _mtAutoSyncTimer = setTimeout(() => {
+    recalculate(true);
+  }, silent ? 280 : 0);
+
+  if (!silent) toast("Synced Means Test results into Petition Forms!", "ok");
 }
 
 async function pullResultsFromMeansTest() {
@@ -2995,47 +3185,7 @@ async function pullResultsFromMeansTest() {
     }
     const calc = win.computeMeansTest();
     const mtCase = win.caseState || JSON.parse(localStorage.getItem(FLMB_MT_STORAGE_KEY) || "{}");
-    const oi = mtCase.otherIncome || {};
-
-    const mt = state.caseData.means_test;
-    mt.source = "external_site";
-    mt.household_size = calc.hhSize;
-    state.caseData.household_size = calc.hhSize;
-    mt.fl_median_income = Number(calc.flMedianAnnual || 0);
-    mt.d1_cmi_wages = round2(calc.d1?.gross || 0);
-    mt.d2_cmi_wages = round2(calc.d2?.gross || 0);
-    mt.d1_cmi_business_net = round2(calc.netBusiness || 0);
-    mt.d1_cmi_rental_net = round2(oi.rentalNet || 0);
-    mt.d1_cmi_interest = round2(oi.interestDiv || 0);
-    mt.d1_cmi_contributions = round2(oi.supportContrib || 0);
-    mt.d1_cmi_unemployment = round2(oi.unemployment || 0);
-    mt.d1_cmi_pension = round2(oi.pension || 0);
-    mt.d1_cmi_other = round2(oi.otherCmi || 0);
-    mt.d1_social_security_excluded = round2(oi.exclSocialSecurity || 0);
-    mt.marital_adjustment = round2(calc.maritalAdj || 0);
-    mt.total_cmi = round2(calc.totalMonthlyCmi || 0);
-    mt.annualized_cmi = round2(calc.annualizedCmi || 0);
-    mt.above_median = !!calc.isAboveMedian;
-    mt.commitment_years = calc.commitmentPeriodMonths === 60 ? 5 : 3;
-    mt.monthly_disposable_income = round2(calc.totals?.monthlyDisposableIncome || 0);
-    mt.external_notes =
-      `Synced from FLMB Means Test (${calc.stdPreset?.label || "2026-mid"}, ${calc.countyData?.name || ""}) | ` +
-      `CMI: ${money(mt.total_cmi)}/mo | Annualized: ${money(mt.annualized_cmi)} vs FL Median ${money(mt.fl_median_income)} | ` +
-      `IRS/UST Deductions: ${money(calc.totals?.totalAllDeductions || 0)}/mo | ` +
-      `Line 45 Monthly Disposable Income: ${money(mt.monthly_disposable_income)}/mo (${calc.commitmentPeriodMonths}-mo commitment)`;
-
-    populateScalarsFromCase();
-    await recalculate(true);
-
-    $("mt-sync-status").innerHTML = `
-      <div class="alert alert-ok">
-        <strong>Pulled Live Means Test Results into Official Forms 122A-1 / 122C-1!</strong><br/>
-        Monthly CMI: <strong>${money(mt.total_cmi)}</strong> &bull;
-        Annualized: <strong>${money(mt.annualized_cmi)}</strong> vs. FL Median (HH ${calc.hhSize}): <strong>${money(mt.fl_median_income)}</strong> &bull;
-        Status: <strong>${calc.isAboveMedian ? "Above Median (" + calc.commitmentPeriodMonths + "-mo / 122A-2 or 122C-2 Auto-Selected)" : "Below Median (" + calc.commitmentPeriodMonths + "-mo)"}</strong> &bull;
-        Form 122C-2 Line 45 MDI: <strong>${money(mt.monthly_disposable_income)}/mo</strong>
-      </div>`;
-    toast("Pulled Means Test results into Petition Forms!", "ok");
+    applyMeansTestSnapshotToPetition(mtCase, calc, { silent: false });
   } catch (err) {
     $("mt-sync-status").innerHTML = `<div class="alert alert-err">${esc(err.message)}</div>`;
     toast(err.message, "err");

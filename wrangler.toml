@@ -7,3 +7,7 @@ keep_vars = true
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
+
+[[kv_namespaces]]
+binding = "PETITION_CONFIG"
+id = "57367a82413248e6875a7195fddb98a9"

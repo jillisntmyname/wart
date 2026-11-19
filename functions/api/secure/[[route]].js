@@ -137,10 +137,11 @@ export async function onRequestPost({ request, params, env }) {
         if (!resp.ok) throw new Error(body.detail || `Python case load failed (${resp.status})`);
         resultObj = { ...body, processed_by: "python-server" };
       } else if (route === "cases-save") {
+        const saveBody = cleanPayload && cleanPayload.case ? cleanPayload : (cleanPayload.case_data || cleanPayload);
         const resp = await fetch(`${backendUrl}/api/cases/save`, {
           method: "POST",
           headers: relayHeaders(true),
-          body: JSON.stringify(cleanPayload.case_data || cleanPayload),
+          body: JSON.stringify(saveBody),
         });
         const body = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(body.detail || `Python case save failed (${resp.status})`);

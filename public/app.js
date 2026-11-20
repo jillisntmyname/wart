@@ -562,62 +562,6 @@ async function cfApiAdapter(url, opts = {}) {
     const fd = opts.body;
     const file = fd.get("file");
     const chapter = fd.get("chapter") || "7";
-    const fname = String((file && file.name) || "").toLowerCase();
-
-    // Support direct lossless .json ingestion from intake.jillmcdonald.biz!
-    if (fname.endsWith(".json")) {
-      const rawText = (await file.text()).replace(/^\uFEFF/, "");
-      let incoming = JSON.parse(rawText);
-      if (incoming && typeof incoming === "object" && incoming.case && typeof incoming.case === "object") {
-        incoming = incoming.case;
-      }
-      const effChapter = (incoming.chapter === "7" || incoming.chapter === "13") ? incoming.chapter : String(chapter);
-      const mergedCase = createBlankCase(effChapter);
-      const _mergeIntake = (tgt, src) => {
-        if (!src || typeof src !== "object") return tgt;
-        for (const k of Object.keys(src)) {
-          const sv = src[k];
-          if (sv === undefined || sv === null) continue;
-          if (Array.isArray(sv)) {
-            tgt[k] = sv;
-          } else if (typeof sv === "object" && tgt[k] && typeof tgt[k] === "object" && !Array.isArray(tgt[k])) {
-            _mergeIntake(tgt[k], sv);
-          } else {
-            tgt[k] = sv;
-          }
-        }
-        return tgt;
-      };
-      _mergeIntake(mergedCase, incoming);
-      mergedCase.chapter = effChapter;
-      if (!mergedCase.cif_source_filename) mergedCase.cif_source_filename = file.name || "web_intake.json";
-      const bdef = (settings.b2030_defaults && settings.b2030_defaults[`ch${effChapter}`]) || {};
-      if (bdef.agreed_fee && (!mergedCase.attorney_fees || !mergedCase.attorney_fees.agreed_fee || mergedCase.attorney_fees.agreed_fee === 2000)) {
-        mergedCase.attorney_fees = Object.assign({}, mergedCase.attorney_fees || {}, {
-          agreed_fee: Number(bdef.agreed_fee),
-          received_prior: Number(bdef.received_prior || 0),
-          filing_fee_paid: Number(bdef.filing_fee || (effChapter === "7" ? 338 : 313)),
-          credit_report_fee: Number(bdef.credit_report_fee || 45),
-          included_other: bdef.included_other || "",
-          excluded_services: bdef.excluded_services || "",
-        });
-      }
-      if (!Array.isArray(mergedCase.exemptions) || mergedCase.exemptions.length === 0) {
-        mergedCase.exemptions = eng.autoApplyFloridaExemptions(mergedCase, settings);
-      }
-      if (!Array.isArray(mergedCase.selected_forms) || mergedCase.selected_forms.length === 0) {
-        mergedCase.selected_forms = eng.selectFormsForCase(mergedCase, settings);
-      }
-      return {
-        case: mergedCase,
-        totals: eng.calculateTotals(mergedCase, settings),
-        recommended_forms: eng.selectFormsForCase(mergedCase, settings),
-        compliance: eng.runComplianceChecks(mergedCase, settings),
-        folder_name: eng.makeClientFolderName(mergedCase),
-        matrix_preview: eng.buildMatrixPreview(mergedCase),
-      };
-    }
-
     const arrBuf = await file.arrayBuffer();
     const pdfBase64 = window.PetitionCrypto.b64Encode(new Uint8Array(arrBuf));
     const secResp = await window.PetitionCrypto.securePost(
@@ -1864,12 +1808,17 @@ function findExemptionCatalogEntry(ex) {
   // Helpful FL / Federal keyword fallbacks for legacy/imported rows
   if (st.includes("222.25(4)")) return allFallback.find((x) => x.id === "fl_wildcard") || null;
   if (st.includes("222.25(1)")) return allFallback.find((x) => x.id === "fl_vehicle") || null;
+  if (st.includes("222.05")) return allFallback.find((x) => x.id === "fl_homestead_leasehold") || null;
   if (st.includes("4(a)(1)") || st.includes("222.01")) return allFallback.find((x) => x.id === "fl_homestead") || null;
   if (st.includes("4(a)(2)")) return allFallback.find((x) => x.id === "fl_personal") || null;
+  if (st.includes("222.21(1)")) return allFallback.find((x) => x.id === "fl_us_pension") || null;
   if (st.includes("222.21")) return allFallback.find((x) => x.id === "fl_retirement") || null;
   if (st.includes("222.14")) return allFallback.find((x) => x.id === "fl_life_annuity") || null;
+  if (st.includes("222.11(2)(c)")) return allFallback.find((x) => x.id === "fl_wages_non_hoh") || null;
   if (st.includes("222.11")) return allFallback.find((x) => x.id === "fl_wages_hoh") || null;
   if (st.includes("222.25(3)")) return allFallback.find((x) => x.id === "fl_eitc") || null;
+  if (st.includes("222.26(1)")) return allFallback.find((x) => x.id === "fl_med_debt_vehicle") || null;
+  if (st.includes("222.26(2)")) return allFallback.find((x) => x.id === "fl_med_debt_personal") || null;
   if (st.includes("522(d)(1)")) return allFallback.find((x) => x.id === "fed_homestead") || null;
   if (st.includes("522(d)(2)")) return allFallback.find((x) => x.id === "fed_vehicle") || null;
   if (st.includes("522(d)(3)")) return allFallback.find((x) => x.id === "fed_household") || null;
@@ -1893,7 +1842,7 @@ function renderExemptionCapMeters() {
     const vehCap = Number(th.fl_vehicle_exemption || 5000) * mult;
     const persCap = Number(th.fl_personal_property_exemption || 1000) * mult;
     const wildCap = Number(th.fl_wildcard_exemption || 4000) * mult;
-    const hasHome = exs.some((x) => x.exemption_id === "fl_homestead" || /4\(a\)\(1\)|222\.01|homestead/i.test(x.statute || ""));
+    const hasHome = exs.some((x) => (x.exemption_id || "").startsWith("fl_homestead") || /4\(a\)\(1\)|4\(b\)|222\.01|222\.05|homestead/i.test(x.statute || ""));
     const vehUsed = exs.filter((x) => x.exemption_id === "fl_vehicle" || /222\.25\(1\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
     const persUsed = exs.filter((x) => x.exemption_id === "fl_personal" || /4\(a\)\(2\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);
     const wildUsed = exs.filter((x) => x.exemption_id === "fl_wildcard" || /222\.25\(4\)/.test(x.statute || "")).reduce((s, x) => s + Number(x.exemption_amount || 0), 0);

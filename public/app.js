@@ -584,18 +584,33 @@ async function cfApiAdapter(url, opts = {}) {
 
   if (url === "/api/import-creditors") {
     const fd = opts.body;
-    const file = fd.get("file");
-    if (_cfUsePythonRelay()) {
-      const arrBuf = await file.arrayBuffer();
-      const b64 = window.PetitionCrypto.b64Encode(new Uint8Array(arrBuf));
-      return window.PetitionCrypto.securePost(
-        "import-creditors",
-        _cfWrapBackendMeta({ filename: file.name, file_base64: b64 })
-      );
+    const files = [...(fd.getAll ? fd.getAll("files") : []), ...(fd.getAll ? fd.getAll("file") : [fd.get("file")])].filter(Boolean);
+    if (!files.length) throw new Error("No creditor file provided.");
+    const ownerOverride = String(fd.get("owner") || "").trim().toLowerCase() || undefined;
+    const isSingleCsv = files.length === 1 && files[0].name.toLowerCase().endsWith(".csv");
+    if (isSingleCsv) {
+      if (_cfUsePythonRelay()) {
+        const arrBuf = await files[0].arrayBuffer();
+        const b64 = window.PetitionCrypto.b64Encode(new Uint8Array(arrBuf));
+        return window.PetitionCrypto.securePost(
+          "import-creditors",
+          _cfWrapBackendMeta({ filename: files[0].name, file_base64: b64 })
+        );
+      }
+      const text = await files[0].text();
+      const res = eng.parseCreditorsCsv(text);
+      return { source: "csv", secured: res.secured, unsecured: res.unsecured, count: res.secured.length + res.unsecured.length };
     }
-    const text = await file.text();
-    const res = eng.parseCreditorsCsv(text);
-    return { source: "csv", secured: res.secured, unsecured: res.unsecured, count: res.secured.length + res.unsecured.length };
+    // 1..N Credit Report PDFs — parse locally in browser via pdf.js + CreditReportParser (zero PII leaves browser)
+    if (!window.CreditReportParser) {
+      throw new Error("Credit Report Parser module not loaded. Please refresh the page.");
+    }
+    const entries = [];
+    for (const f of files) {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      entries.push({ filename: f.name, bytes, owner: ownerOverride });
+    }
+    return await window.CreditReportParser.parseCreditReportPdfFiles(entries);
   }
 
   if (url.startsWith("/api/generate")) {
@@ -3119,12 +3134,76 @@ function setupStaticHandlers() {
     }
   });
 
-  // Creditors Add & Import
+  // Creditors Add & Import (Multi-PDF Credit Reports + CSV)
   $("btn-import-cred-trigger").addEventListener("click", () => $("cred-file-input").click());
   $("cred-file-input").addEventListener("change", () => {
-    if ($("cred-file-input").files?.length) handleCreditorUpload($("cred-file-input").files[0]);
+    if ($("cred-file-input").files?.length) handleCreditorFilesUpload(Array.from($("cred-file-input").files));
     $("cred-file-input").value = "";
   });
+  const credDz = $("cred-dropzone");
+  if (credDz) {
+    credDz.addEventListener("click", () => $("cred-file-input").click());
+    credDz.addEventListener("dragover", (e) => { e.preventDefault(); credDz.classList.add("dragover"); });
+    credDz.addEventListener("dragleave", () => credDz.classList.remove("dragover"));
+    credDz.addEventListener("drop", (e) => {
+      e.preventDefault();
+      credDz.classList.remove("dragover");
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) handleCreditorFilesUpload(files);
+    });
+  }
+
+  // Credit Report Review Modal Controls
+  if ($("btn-close-cr-modal")) $("btn-close-cr-modal").addEventListener("click", closeCreditReportReviewModal);
+  if ($("btn-close-cr-modal-foot")) $("btn-close-cr-modal-foot").addEventListener("click", closeCreditReportReviewModal);
+  if ($("cr-review-modal")) {
+    $("cr-review-modal").addEventListener("click", (e) => {
+      if (e.target === $("cr-review-modal")) closeCreditReportReviewModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("cr-review-modal") && !$("cr-review-modal").classList.contains("hidden")) {
+      closeCreditReportReviewModal();
+    }
+  });
+  if ($("cr-modal-filter-bar")) {
+    $("cr-modal-filter-bar").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-cr-filter]");
+      if (!btn || !state.crReview) return;
+      $("cr-modal-filter-bar").querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.crReview.filter = btn.dataset.crFilter || "ALL";
+      renderCreditReportReviewModal();
+    });
+  }
+  if ($("btn-cr-select-active")) {
+    $("btn-cr-select-active").addEventListener("click", () => {
+      if (!state.crReview) return;
+      state.crReview.items.forEach((it) => { it.selected = Boolean(it.include_default); });
+      renderCreditReportReviewModal();
+    });
+  }
+  if ($("btn-cr-select-all")) {
+    $("btn-cr-select-all").addEventListener("click", () => {
+      if (!state.crReview) return;
+      state.crReview.items.forEach((it) => { it.selected = true; });
+      renderCreditReportReviewModal();
+    });
+  }
+  if ($("btn-cr-clear-all")) {
+    $("btn-cr-clear-all").addEventListener("click", () => {
+      if (!state.crReview) return;
+      state.crReview.items.forEach((it) => { it.selected = false; });
+      renderCreditReportReviewModal();
+    });
+  }
+  if ($("btn-cr-confirm-import")) {
+    $("btn-cr-confirm-import").addEventListener("click", confirmCreditReportImport);
+  }
+  if ($("cr-review-tbody")) {
+    $("cr-review-tbody").addEventListener("change", handleCreditReportReviewEdit);
+    $("cr-review-tbody").addEventListener("input", handleCreditReportReviewEdit);
+  }
   $("btn-add-secured").addEventListener("click", () => {
     state.caseData.secured_creditors.push({
       name: "", attn: "Attn: Bankruptcy", street: "", city: "", state: "", zip_code: "",
@@ -3261,6 +3340,63 @@ function applyChapterDefaultsToCase(ch) {
 }
 
 async function handleCifUpload(file) {
+  const fname = (file.name || "").toLowerCase();
+
+  // 1-Click Intake Bundle (.zip) from intake.jillmcdonald.biz/admin:
+  // Contains Intake_*.json + all attached CreditReport_*.pdf files!
+  if (fname.endsWith(".zip")) {
+    if (!window.JSZip) {
+      toast("ZIP reader library (JSZip) failed to load.", "err");
+      return;
+    }
+    toast(`Extracting Intake Bundle ${file.name}...`);
+    try {
+      const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
+      let jsonEntry = null;
+      const pdfEntries = [];
+      zip.forEach((relPath, entry) => {
+        if (entry.dir) return;
+        const low = relPath.toLowerCase();
+        if (low.endsWith(".json") && !jsonEntry) jsonEntry = entry;
+        else if (low.endsWith(".pdf")) pdfEntries.push(entry);
+      });
+
+      if (!jsonEntry && !pdfEntries.length) {
+        toast("ZIP bundle does not contain an intake .json or credit report .pdf.", "err");
+        return;
+      }
+
+      if (jsonEntry) {
+        const jsonText = await jsonEntry.async("string");
+        const baseName = jsonEntry.name.split(/[\\/]/).pop() || "intake.json";
+        const jsonFile = new File([jsonText], baseName, { type: "application/json" });
+        const fd = new FormData();
+        fd.append("file", jsonFile);
+        fd.append("chapter", $("import-chapter").value || "7");
+        const res = await api("/api/import-cif", { method: "POST", body: fd });
+        applyServerCaseResponse(res);
+        if (hasSaveableClientName(state.caseData)) {
+          markDirtyAndScheduleAutoSave();
+        }
+        toast(`Imported Intake JSON -> Folder: ${state.folderName}`, "ok");
+      }
+
+      if (pdfEntries.length) {
+        toast(`Parsing ${pdfEntries.length} bundled credit report PDF(s)...`);
+        const parsedFiles = [];
+        for (const pe of pdfEntries) {
+          const u8 = await pe.async("uint8array");
+          const baseName = pe.name.split(/[\\/]/).pop() || "credit_report.pdf";
+          parsedFiles.push(new File([u8], baseName, { type: "application/pdf" }));
+        }
+        await handleCreditorFilesUpload(parsedFiles, { autoOwner: true });
+      }
+    } catch (err) {
+      toast(`Failed to import bundle: ${err.message}`, "err");
+    }
+    return;
+  }
+
   const fd = new FormData();
   fd.append("file", file);
   fd.append("chapter", $("import-chapter").value || "7");
@@ -3278,24 +3414,313 @@ async function handleCifUpload(file) {
   }
 }
 
-async function handleCreditorUpload(file) {
-  const fd = new FormData();
-  fd.append("file", file);
-  toast(`Parsing creditors from ${file.name}...`);
+const CR_PLACEMENT_OPTIONS = [
+  ["secured_mortgage", "D", "Sch. D — Mortgage / Real Estate", "Real Estate / Mortgage", "agreement", "Other", "Mortgage"],
+  ["secured_auto", "D", "Sch. D — Auto / Vehicle Loan", "Vehicle / Auto Loan", "agreement", "Other", "Auto Loan"],
+  ["secured_other", "D", "Sch. D — Other Secured / Lien", "Secured Collateral", "agreement", "Other", "Secured"],
+  ["priority_dso", "E", "Sch. E — Priority (Child Support / DSO)", "", "agreement", "DSO", "Domestic Support Obligation"],
+  ["priority_tax", "E", "Sch. E — Priority (IRS / Taxes)", "", "agreement", "Taxes", "Taxes"],
+  ["unsecured_card", "F", "Sch. F — Credit Card / Revolving", "", "agreement", "Other", "CreditCard"],
+  ["unsecured_student", "F", "Sch. F — Student Loan", "", "agreement", "StudentLoan", "Student Loan"],
+  ["unsecured_medical", "F", "Sch. F — Medical", "", "agreement", "Other", "Medical"],
+  ["unsecured_collection", "F", "Sch. F — Collection Agency", "", "agreement", "Other", "Collection"],
+  ["unsecured_other", "F", "Sch. F — Personal Loan / Other Unsecured", "", "agreement", "Other", "PersonalLoan"],
+];
+
+async function handleCreditorFilesUpload(fileList, opts = {}) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+
+  const ownerOverride = opts.autoOwner ? "" : ($("cred-import-owner")?.value || "");
+  const isSingleCsv = files.length === 1 && files[0].name.toLowerCase().endsWith(".csv");
+
+  if (isSingleCsv) {
+    const fd = new FormData();
+    fd.append("file", files[0]);
+    toast(`Parsing CSV creditors from ${files[0].name}...`);
+    try {
+      const res = await api("/api/import-creditors", { method: "POST", body: fd });
+      if (res.secured?.length) state.caseData.secured_creditors.push(...res.secured);
+      if (res.unsecured?.length) state.caseData.unsecured_creditors.push(...res.unsecured);
+      renderSecuredCreditors();
+      renderUnsecuredCreditors();
+      markDirtyAndScheduleAutoSave();
+      await recalculate(false);
+      $("cred-import-status").innerHTML = `<div class="alert alert-ok">Imported <strong>${res.count}</strong> creditor(s) from <code>${esc(files[0].name)}</code>.</div>`;
+      toast(`Imported ${res.count} creditor(s)!`, "ok");
+    } catch (err) {
+      $("cred-import-status").innerHTML = `<div class="alert alert-err">${esc(err.message)}</div>`;
+      toast(err.message, "err");
+    }
+    return;
+  }
+
+  // 1..N Credit Report PDFs -> Parse & Open Review Modal
+  const pdfFiles = files.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+  if (!pdfFiles.length) {
+    toast("Please upload .pdf credit report(s) or a .csv file.", "err");
+    return;
+  }
+
+  toast(`Parsing ${pdfFiles.length} credit report PDF(s)...`);
   try {
-    const res = await api("/api/import-creditors", { method: "POST", body: fd });
-    if (res.secured?.length) state.caseData.secured_creditors.push(...res.secured);
-    if (res.unsecured?.length) state.caseData.unsecured_creditors.push(...res.unsecured);
-    renderSecuredCreditors();
-    renderUnsecuredCreditors();
-    markDirtyAndScheduleAutoSave();
-    await recalculate(false);
-    $("cred-import-status").innerHTML = `<div class="alert alert-ok">Imported <strong>${res.count}</strong> creditor(s) from <code>${esc(file.name)}</code>.</div>`;
-    toast(`Imported ${res.count} creditor(s)!`, "ok");
+    let res;
+    if (window.CreditReportParser && window.pdfjsLib) {
+      const entries = [];
+      for (const f of pdfFiles) {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        entries.push({ filename: f.name, bytes, owner: ownerOverride || undefined });
+      }
+      res = await window.CreditReportParser.parseCreditReportPdfFiles(entries);
+    } else {
+      const fd = new FormData();
+      for (const f of pdfFiles) fd.append("files", f);
+      if (ownerOverride) fd.append("owner", ownerOverride);
+      res = await api("/api/import-creditors", { method: "POST", body: fd });
+    }
+
+    if (!res.tradelines || !res.tradelines.length) {
+      $("cred-import-status").innerHTML = `<div class="alert alert-warn">No creditor tradelines were detected in ${pdfFiles.length} PDF(s). Confirm the files are text-based credit reports from AnnualCreditReport.com (not scanned images).</div>`;
+      toast("No creditor accounts found in uploaded PDF(s).", "err");
+      return;
+    }
+
+    openCreditReportReviewModal(res);
   } catch (err) {
     $("cred-import-status").innerHTML = `<div class="alert alert-err">${esc(err.message)}</div>`;
     toast(err.message, "err");
   }
+}
+
+function openCreditReportReviewModal(res) {
+  const parser = window.CreditReportParser;
+  const items = (res.tradelines || []).map((t, idx) => ({
+    ...t,
+    _idx: idx,
+    selected: Boolean(t.include_default),
+    existing_hint: parser ? parser.findExistingMatchHint(t, state.caseData) : "",
+  }));
+
+  state.crReview = {
+    files: res.files || [],
+    raw_count: res.raw_count || items.length,
+    unique_count: res.unique_count || items.length,
+    duplicates_merged: res.duplicates_merged || 0,
+    filter: "ALL",
+    items,
+  };
+
+  if ($("cr-modal-filter-bar")) {
+    $("cr-modal-filter-bar").querySelectorAll(".filter-pill").forEach((b) => {
+      b.classList.toggle("active", b.dataset.crFilter === "ALL");
+    });
+  }
+
+  renderCreditReportReviewModal();
+  $("cr-review-modal")?.classList.remove("hidden");
+}
+
+function closeCreditReportReviewModal() {
+  $("cr-review-modal")?.classList.add("hidden");
+}
+
+function renderCreditReportReviewModal() {
+  const rev = state.crReview;
+  if (!rev) return;
+
+  const fileSummary = rev.files
+    .map((f) => `${(f.bureau || "generic").toUpperCase()} (${f.tradelines_found})`)
+    .join(" + ");
+  if ($("cr-modal-sub")) {
+    $("cr-modal-sub").textContent =
+      `Parsed ${fileSummary || "PDF"} -> ${rev.unique_count} unique account(s) (${rev.duplicates_merged} cross-bureau duplicate(s) merged). Selected items are added as NEW entries — existing creditors are never overwritten.`;
+  }
+
+  const selItems = rev.items.filter((i) => i.selected);
+  const selD = selItems.filter((i) => i.schedule === "D").length;
+  const selE = selItems.filter((i) => i.schedule === "E").length;
+  const selF = selItems.filter((i) => i.schedule === "F").length;
+  const skipCnt = rev.items.filter((i) => !i.include_default).length;
+
+  if ($("cr-modal-stats")) {
+    $("cr-modal-stats").innerHTML = `
+      <div class="stat-card"><div class="val">${selItems.length}</div><div class="lbl">Selected to Import</div></div>
+      <div class="stat-card"><div class="val">${selD}</div><div class="lbl">Secured (Sch. D)</div></div>
+      <div class="stat-card"><div class="val">${selE}</div><div class="lbl">Priority (Sch. E)</div></div>
+      <div class="stat-card"><div class="val">${selF}</div><div class="lbl">Unsecured (Sch. F)</div></div>
+    `;
+  }
+
+  const setText = (id, v) => { const el = $(id); if (el) el.textContent = String(v); };
+  setText("cr-cnt-all", rev.items.length);
+  setText("cr-cnt-active", selItems.length);
+  setText("cr-cnt-d", rev.items.filter((i) => i.schedule === "D").length);
+  setText("cr-cnt-e", rev.items.filter((i) => i.schedule === "E").length);
+  setText("cr-cnt-f", rev.items.filter((i) => i.schedule === "F").length);
+  setText("cr-cnt-skip", skipCnt);
+
+  const f = rev.filter || "ALL";
+  const visible = rev.items.filter((it) => {
+    if (f === "ACTIVE") return it.selected;
+    if (f === "D" || f === "E" || f === "F") return it.schedule === f;
+    if (f === "SKIPPED") return !it.include_default;
+    return true;
+  });
+
+  const tbody = $("cr-review-tbody");
+  if (!tbody) return;
+
+  if (!visible.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted" style="text-align:center; padding:18px;">No accounts match this filter.</td></tr>`;
+  } else {
+    tbody.innerHTML = visible
+      .map((it) => {
+        const bureauBadges = (it.bureaus || [])
+          .map((b) => `<span class="tag" style="font-size:10px; padding:1px 5px; margin-right:3px;">${esc(b.slice(0, 2).toUpperCase())}</span>`)
+          .join("");
+        const flagBadges = [];
+        if (it.skip_reason) {
+          flagBadges.push(`<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 5px;">${esc(it.skip_reason)}</span>`);
+        }
+        if (it.existing_hint) {
+          flagBadges.push(`<span class="tag" style="background:#dbeafe;color:#1e40af;font-size:10px;padding:1px 5px;" title="Existing creditor will NOT be modified">${esc(it.existing_hint)}</span>`);
+        }
+        for (const fl of it.flags || []) {
+          if (fl === "Missing mailing address") continue;
+          flagBadges.push(`<span class="muted" style="font-size:10.5px; display:block;">&bull; ${esc(fl)}</span>`);
+        }
+        const missingAddr = !it.street && !it.city;
+        const addrBorder = missingAddr ? "border:1.5px solid #d97706; background:#fffbeb;" : "";
+
+        const placeOpts = CR_PLACEMENT_OPTIONS.map(
+          ([cat, , lbl]) => `<option value="${cat}" ${it.category === cat ? "selected" : ""}>${esc(lbl)}</option>`
+        ).join("");
+
+        return `<tr data-cr-idx="${it._idx}" style="${it.selected ? "" : "opacity:0.62;"}">
+          <td style="text-align:center;">
+            <input type="checkbox" data-cr-field="selected" ${it.selected ? "checked" : ""} />
+          </td>
+          <td>
+            <input type="text" data-cr-field="creditor_name" value="${esc(it.creditor_name)}" style="width:100%; font-weight:600; margin-bottom:4px;" />
+            <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-bottom:3px;">
+              ${bureauBadges}
+              <span class="muted" style="font-size:11px;">Acct:</span>
+              <input type="text" data-cr-field="account_last4" value="${esc(it.account_last4)}" maxlength="6" placeholder="Last4" style="width:58px; font-size:11.5px; padding:2px 4px;" />
+              <span class="muted" style="font-size:11px;">Open: ${esc(it.date_opened || "—")}</span>
+            </div>
+            <div>${flagBadges.join(" ")}</div>
+          </td>
+          <td>
+            <input type="text" data-cr-field="street" value="${esc(it.street)}" placeholder="Street / PO Box" style="width:100%; margin-bottom:4px; ${addrBorder}" />
+            <div style="display:flex; gap:4px;">
+              <input type="text" data-cr-field="city" value="${esc(it.city)}" placeholder="City" style="flex:1; min-width:80px; ${addrBorder}" />
+              <input type="text" data-cr-field="state" value="${esc(it.state)}" maxlength="2" placeholder="ST" style="width:44px; text-transform:uppercase; ${addrBorder}" />
+              <input type="text" data-cr-field="zip_code" value="${esc(it.zip_code)}" placeholder="ZIP" style="width:82px; ${addrBorder}" />
+            </div>
+          </td>
+          <td>
+            <div style="font-size:11px; color:#64748b;">Balance ($)</div>
+            <input type="number" step="0.01" data-cr-field="balance" value="${Number(it.balance || 0)}" style="width:100%; text-align:right; font-weight:600; margin-bottom:4px;" />
+            <div style="font-size:11px; color:#64748b;">Mo. Pmt ($)</div>
+            <input type="number" step="0.01" data-cr-field="monthly_payment" value="${Number(it.monthly_payment || 0)}" style="width:100%; text-align:right;" />
+          </td>
+          <td>
+            <select data-cr-field="category" style="width:100%; margin-bottom:4px; font-size:12px;">${placeOpts}</select>
+            ${
+              it.schedule === "D"
+                ? `<input type="text" data-cr-field="collateral_desc" value="${esc(it.collateral_desc)}" placeholder="Collateral description" style="width:100%; font-size:11.5px;" />`
+                : `<input type="text" data-cr-field="claim_type_specify" value="${esc(it.claim_type_specify)}" placeholder="Debt type / notes" style="width:100%; font-size:11.5px;" />`
+            }
+          </td>
+          <td>
+            <select data-cr-field="owner" style="width:100%; font-size:12px;">
+              <option value="debtor1" ${it.owner === "debtor1" ? "selected" : ""}>Debtor 1</option>
+              <option value="debtor2" ${it.owner === "debtor2" ? "selected" : ""}>Debtor 2</option>
+              <option value="both" ${it.owner === "both" ? "selected" : ""}>Both</option>
+            </select>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  if ($("cr-modal-footer-note")) {
+    $("cr-modal-footer-note").textContent = `${selItems.length} creditor(s) selected (${selD} Secured Sch. D, ${selE} Priority Sch. E, ${selF} Unsecured Sch. F)`;
+  }
+  const confirmBtn = $("btn-cr-confirm-import");
+  if (confirmBtn) {
+    confirmBtn.disabled = selItems.length === 0;
+    confirmBtn.textContent = `Import ${selItems.length} Selected Creditor(s) as New Entries`;
+  }
+}
+
+function handleCreditReportReviewEdit(e) {
+  const el = e.target;
+  const field = el?.dataset?.crField;
+  if (!field || !state.crReview) return;
+  const tr = el.closest("tr[data-cr-idx]");
+  if (!tr) return;
+  const idx = Number(tr.dataset.crIdx);
+  const item = state.crReview.items[idx];
+  if (!item) return;
+
+  if (field === "selected") {
+    item.selected = el.checked;
+    renderCreditReportReviewModal();
+    return;
+  }
+  if (field === "category") {
+    const opt = CR_PLACEMENT_OPTIONS.find((o) => o[0] === el.value);
+    if (opt) {
+      item.category = opt[0];
+      item.schedule = opt[1];
+      if (opt[3]) item.collateral_desc = item.collateral_desc || opt[3];
+      item.lien_type = opt[4];
+      item.claim_type = opt[5];
+      item.claim_type_specify = opt[6];
+    }
+    renderCreditReportReviewModal();
+    return;
+  }
+  if (field === "balance" || field === "monthly_payment") {
+    item[field] = parseFloat(el.value) || 0;
+    return;
+  }
+  if (field === "state") {
+    item.state = String(el.value || "").toUpperCase().slice(0, 2);
+    return;
+  }
+  item[field] = el.value;
+}
+
+async function confirmCreditReportImport() {
+  const rev = state.crReview;
+  if (!rev || !window.CreditReportParser) return;
+  const chosen = rev.items.filter((i) => i.selected);
+  if (!chosen.length) {
+    toast("Select at least one creditor to import.", "err");
+    return;
+  }
+
+  const { secured, unsecured } = window.CreditReportParser.tradelinesToPetitionCreditors(chosen);
+  // Always append as NEW entries — never overwrite or mutate existing creditors!
+  if (secured.length) state.caseData.secured_creditors.push(...secured);
+  if (unsecured.length) state.caseData.unsecured_creditors.push(...unsecured);
+
+  closeCreditReportReviewModal();
+  renderSecuredCreditors();
+  renderUnsecuredCreditors();
+  markDirtyAndScheduleAutoSave();
+  await recalculate(false);
+  switchTab("creditors");
+
+  const priCnt = unsecured.filter((u) => u.priority).length;
+  const nonPriCnt = unsecured.length - priCnt;
+  const msg = `Added <strong>${chosen.length}</strong> new creditor(s) from ${rev.files.length} credit report PDF(s): <strong>${secured.length}</strong> Secured (Sch. D), <strong>${priCnt}</strong> Priority (Sch. E), <strong>${nonPriCnt}</strong> Unsecured (Sch. F). (${rev.duplicates_merged} cross-bureau duplicate(s) merged.)`;
+  if ($("cred-import-status")) {
+    $("cred-import-status").innerHTML = `<div class="alert alert-ok">${msg}</div>`;
+  }
+  toast(`Imported ${chosen.length} new creditor(s) into Petition!`, "ok");
 }
 
 async function loadSample(chapter, joint) {

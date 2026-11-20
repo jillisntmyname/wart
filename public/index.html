@@ -62,9 +62,9 @@
             </select>
           </div>
           <div class="dropzone" id="cif-dropzone">
-            <div class="dz-title">Drop Web Intake ".json" or filled-out CIF ".pdf" here</div>
-            <div class="dz-sub">Supports intake.jillmcdonald.biz JSON exports, CIF v2.1 PDF &amp; legacy CIF &bull; Auto-extracts Debtor(s), Assets, Budget, Contracts, DSO, Creditors, Codebtors, SOFA &amp; FL Exemptions</div>
-            <input type="file" id="cif-file-input" accept=".pdf,.json" class="hidden" />
+            <div class="dz-title">Drop Intake Bundle ".zip", Web Intake ".json", or filled-out CIF ".pdf" here</div>
+            <div class="dz-sub">Supports intake.jillmcdonald.biz 1-click .zip bundles (auto-imports intake + Equifax/Experian/TransUnion credit reports), .json exports, CIF v2.1 PDF &amp; legacy CIF</div>
+            <input type="file" id="cif-file-input" accept=".pdf,.json,.zip" class="hidden" />
           </div>
           <div id="cif-warnings" style="margin-top: 12px;"></div>
         </div>
@@ -406,14 +406,20 @@
 
       <div class="card">
         <div class="card-header">
-          <h2>Import Creditors from CSV or Credit Report PDF</h2>
+          <h2>Import Creditors from Credit Reports (Equifax, Experian, TransUnion) or CSV</h2>
           <div class="btn-group">
-            <button class="btn btn-secondary btn-sm" id="btn-import-cred-trigger">Upload CSV / Credit Report PDF</button>
-            <input type="file" id="cred-file-input" accept=".csv,.pdf" class="hidden" />
+            <select id="cred-import-owner" style="padding:5px 8px; border-radius:5px; font-size:12px;" title="Assign imported credit reports to Debtor 1 or Debtor 2">
+              <option value="">Owner: Auto (from filename)</option>
+              <option value="debtor1">Owner: Debtor 1</option>
+              <option value="debtor2">Owner: Debtor 2 / Spouse</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="btn-import-cred-trigger">Upload Credit Report PDF(s) / CSV</button>
+            <input type="file" id="cred-file-input" accept=".csv,.pdf" multiple class="hidden" />
           </div>
         </div>
-        <div class="muted">
-          The CIF form references separate client "Debt Sheets" for unsecured credit cards &amp; medical bills. Upload a CSV export (columns: <code>Creditor, Address, City, State, Zip, Account, Balance, Date, Type</code>) or a Credit Report PDF to append creditors automatically.
+        <div class="dropzone" id="cred-dropzone" style="padding: 16px; margin-bottom: 8px;">
+          <div class="dz-title">Drop 1&ndash;6 Credit Report PDFs (Equifax, Experian, TransUnion) or a CSV here</div>
+          <div class="dz-sub">Auto-extracts Creditor Name, Mailing Address, Last-4 Account #, Balance &amp; Payment &bull; Classifies Secured (Sch. D) vs. Priority (Sch. E) vs. Unsecured (Sch. F) &bull; Deduplicates across all 3 bureaus &bull; Preview &amp; edit before importing as new entries</div>
         </div>
         <div id="cred-import-status" style="margin-top: 8px;"></div>
       </div>
@@ -980,11 +986,73 @@
     </div>
   </div>
 
+  <!-- CREDIT REPORT REVIEW & IMPORT MODAL -->
+  <div id="cr-review-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="cr-modal-title">
+    <div class="modal-dialog" style="max-width: 1240px; width: 96vw;">
+      <div class="modal-header">
+        <div>
+          <h2 id="cr-modal-title">Review Parsed Credit Report Creditors</h2>
+          <div id="cr-modal-sub" style="font-size:12px; color:#cbd5e1;">All selected rows are imported as new entries (existing creditors are never overwritten).</div>
+        </div>
+        <div class="btn-group">
+          <button type="button" class="btn btn-danger btn-sm" id="btn-close-cr-modal">&times; Cancel</button>
+        </div>
+      </div>
+      <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+        <div id="cr-modal-stats" class="stat-grid" style="margin-bottom: 10px;"></div>
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+          <div class="filter-bar" id="cr-modal-filter-bar" style="margin:0;">
+            <button type="button" class="filter-pill active" data-cr-filter="ALL">All (<span id="cr-cnt-all">0</span>)</button>
+            <button type="button" class="filter-pill" data-cr-filter="ACTIVE">Selected / Active (<span id="cr-cnt-active">0</span>)</button>
+            <button type="button" class="filter-pill" data-cr-filter="D">Secured Sch. D (<span id="cr-cnt-d">0</span>)</button>
+            <button type="button" class="filter-pill" data-cr-filter="E">Priority Sch. E (<span id="cr-cnt-e">0</span>)</button>
+            <button type="button" class="filter-pill" data-cr-filter="F">Unsecured Sch. F (<span id="cr-cnt-f">0</span>)</button>
+            <button type="button" class="filter-pill" data-cr-filter="SKIPPED">Closed $0 / Auth User (<span id="cr-cnt-skip">0</span>)</button>
+          </div>
+          <div class="btn-group">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cr-select-active">Select Active Only</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cr-select-all">Select All</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cr-clear-all">Clear All</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 36px;">Add</th>
+                <th style="min-width: 195px;">Creditor / Acct / Bureaus</th>
+                <th style="min-width: 240px;">Mailing Address (Street, City, ST ZIP)</th>
+                <th style="width: 112px;">Balance / Pmt</th>
+                <th style="min-width: 185px;">Petition Placement</th>
+                <th style="width: 105px;">Owner</th>
+              </tr>
+            </thead>
+            <tbody id="cr-review-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="muted" id="cr-modal-footer-note">0 creditors selected</span>
+        <div class="btn-group">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-close-cr-modal-foot">Cancel</button>
+          <button type="button" class="btn btn-gold" id="btn-cr-confirm-import">Import Selected Creditors as New Entries</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+    }
+  </script>
   <script src="/exemptions_catalog.js?v=2"></script>
   <script src="/crypto_client.js?v=2"></script>
+  <script src="/credit_report_parser.js?v=1"></script>
   <script src="/cf_engine.js?v=5"></script>
   <script src="/app.js?v=12"></script>
 </body>
